@@ -38,6 +38,10 @@ func Conflict(c *gin.Context, message string) {
 	Error(c, http.StatusConflict, "CONFLICT", message)
 }
 
+func Unprocessable(c *gin.Context, code, message string) {
+	Error(c, http.StatusUnprocessableEntity, code, message)
+}
+
 func InternalError(c *gin.Context, message string) {
 	Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", message)
 }

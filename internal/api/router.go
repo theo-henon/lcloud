@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/theo-henon/lcloud/internal/auth"
+	"github.com/theo-henon/lcloud/internal/volume"
 	"github.com/theo-henon/lcloud/pkg/httputil"
 )
 
@@ -148,9 +149,13 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 }
 
 type RouterConfig struct {
-	AuthService *auth.Service
-	StaticFS    fs.FS
-	GinMode     string
+	AuthService    *auth.Service
+	DiskRegistry   *volume.DiskRegistry
+	VolumeService  *volume.Service
+	FileService    *volume.FileService
+	MaxUploadBytes int64
+	StaticFS       fs.FS
+	GinMode        string
 }
 
 func NewRouter(cfg RouterConfig) *gin.Engine {
@@ -162,9 +167,15 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 
 	router := gin.New()
 	router.Use(gin.Recovery(), gin.Logger())
+	if cfg.MaxUploadBytes > 0 {
+		router.MaxMultipartMemory = cfg.MaxUploadBytes
+	}
 
 	authHandler := NewAuthHandler(cfg.AuthService)
 	adminHandler := NewAdminHandler(cfg.AuthService)
+	diskHandler := NewDiskHandler(cfg.DiskRegistry)
+	volumeHandler := NewVolumeHandler(cfg.VolumeService)
+	fileHandler := NewFileHandler(cfg.FileService)
 
 	api := router.Group("/api")
 	{
@@ -183,6 +194,24 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		admin := api.Group("/admin", auth.AuthMiddleware(cfg.AuthService), auth.RequireAdmin())
 		{
 			admin.POST("/users", adminHandler.CreateUser)
+		}
+
+		protected := api.Group("", auth.AuthMiddleware(cfg.AuthService))
+		{
+			protected.GET("/disks", diskHandler.List)
+
+			protected.GET("/volumes", volumeHandler.List)
+			protected.POST("/volumes", volumeHandler.Create)
+			protected.GET("/volumes/:id", volumeHandler.Get)
+			protected.PATCH("/volumes/:id", volumeHandler.Patch)
+			protected.DELETE("/volumes/:id", volumeHandler.Delete)
+
+			protected.GET("/volumes/:id/files", fileHandler.List)
+			protected.POST("/volumes/:id/files/directories", fileHandler.CreateDirectory)
+			protected.POST("/volumes/:id/files", fileHandler.Upload)
+			protected.GET("/volumes/:id/files/content", fileHandler.Download)
+			protected.GET("/volumes/:id/files/thumbnail", fileHandler.Thumbnail)
+			protected.DELETE("/volumes/:id/files", fileHandler.Delete)
 		}
 	}
 

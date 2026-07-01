@@ -25,10 +25,16 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       STORAGE_BASE_PATH: /data/storage
+      STORAGE_DISK_PATHS: ${STORAGE_DISK_PATHS:-/data/disks/ssd,/data/disks/hdd1,/data/disks/hdd2}
+      STORAGE_DISK_LABELS: ${STORAGE_DISK_LABELS:-SSD,HDD 1,HDD 2}
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-104857600}
       APP_PORT: "8080"
       GIN_MODE: ${GIN_MODE:-release}
     volumes:
       - ${STORAGE_BASE_PATH:-./data/storage}:/data/storage
+      - ${DISK_SSD:-./data/disks/ssd}:/data/disks/ssd
+      - ${DISK_HDD1:-./data/disks/hdd1}:/data/disks/hdd1
+      - ${DISK_HDD2:-./data/disks/hdd2}:/data/disks/hdd2
     depends_on:
       postgres:
         condition: service_healthy

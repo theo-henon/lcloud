@@ -1,46 +1,61 @@
-# Spec: Phase 0 — Technical foundations
+# Spec: Phase 1.1 — Volume management
 
-> **Status:** Implemented on `feature/phase-0-foundations` — pending `/review`
-> **Scope:** Bootstrap the full stack from zero to a running Docker deployment with auth and UI skeleton.
-> **Sources:** [STARTUP.md](./STARTUP.md#phase-0--technical-foundations), [VISION.md](./VISION.md), [docs/project.md](./docs/project.md)
+> **Status:** Draft — pending review
+> **Scope:** Core volume primitive — creation, storage, file operations, indexing, thumbnails.
+> **Prerequisite:** Phase 0 complete (auth, Docker, UI skeleton, Volume GORM model schema-only).
+> **Sources:** [STARTUP.md](./STARTUP.md#phase-11--volume-management), [VISION.md](./VISION.md), [docs/project.md](./docs/project.md)
 
 ---
 
 ## Assumptions (correct me now or I proceed)
 
-1. **Greenfield repo** — only documentation exists today; all code is created in this phase.
-2. **No public signup** — "register" in STARTUP means an **admin-only** user-creation endpoint, not self-service registration ([docs/project.md](./docs/project.md#tech-stack)).
-3. **Initial admin from env** — on first startup, if no users exist, seed one admin from `ADMIN_EMAIL` / `ADMIN_PASSWORD` in `.env`.
-4. **JWT transport** — Bearer access token in `Authorization` header; refresh token stored separately (httpOnly cookie or secure storage — see Auth flow). Access token 24h, refresh token 7 days, both configurable via env.
-5. **Single Docker image** — Go server serves the built React SPA as static files on the same port (`8080`). No separate frontend container for MVP bootstrap.
-6. **Volume model is schema-only** — GORM model + migration exist; no volume CRUD or disk operations until Phase 1.1.
-7. **GORM AutoMigrate** — used for Phase 0 development migrations; production SQL migrations documented later per [docs/project.md](./docs/project.md#database-migrations).
-8. **Local URL** — `http://localhost:8080` ([docs/project.md](./docs/project.md#urls)).
-9. **Design system** — UI follows [design/DESIGN.md](./design/DESIGN.md) (dark canvas `#0a0a0a`, electric yellow `#faff69`, Inter + JetBrains Mono).
-10. **Reverse proxy / TLS** — out of scope; deployer handles HTTPS in front of Docker ([STARTUP.md](./STARTUP.md#open-assumptions)).
+1. **Phase 0 is shipped** — JWT auth, Docker Compose, React shell, and the base `Volume` GORM model exist; Phase 1.1 extends them.
+2. **Multiple physical disks supported** — each disk is a separate host mount mapped into the container (e.g. SSD + two HDDs). lcloud does not mount disks itself; the deployer configures Docker volume mounts ([STARTUP.md](./STARTUP.md#open-assumptions)).
+3. **Disk registry via `STORAGE_DISK_PATHS`** — comma-separated list of absolute paths inside the container (e.g. `/data/disks/ssd,/data/disks/hdd1,/data/disks/hdd2`). Each entry is one physical disk. `GET /api/disks` exposes this list with free/total space. Fallback for local dev: if unset, scan immediate subdirectories of `STORAGE_BASE_PATH`.
+4. **Volume created on one chosen disk** — at creation the user picks one disk from the registry; volumes on different disks coexist independently (multi-disk is a first-class requirement, not a Phase 1.2 feature).
+5. **Volume root directory name = volume UUID** — `{disk_path}/{volume_id}/`; display name lives in `.volume.json` only.
+6. **Filter mode is exclusive** — each volume uses either an **allowlist** or a **blocklist**, not both simultaneously.
+7. **Extensions are normalized** — stored lowercase with leading dot (`.jpg`); comparison is case-insensitive.
+8. **Quota `0` = unlimited** — consistent with common self-hosted conventions; documented in UI.
+9. **Image thumbnails only** — JPEG, PNG, WebP, GIF; no video thumbnails in Phase 1.1 ([STARTUP.md](./STARTUP.md#phase-11--volume-management)).
+10. **No event bus yet** — plugin events arrive in Phase 1.3; volume/file services expose clean hooks but do not emit bus events in 1.1.
+11. **No volume re-import UI** — `.volume.json` portability is enforced by implementation; explicit re-import flow is post-MVP (structure must remain valid).
+12. **No Bleve search UI** — indexer runs on upload/delete; search UI is Phase 1.2; `VolumeIndexer.Search` is implemented and tested but not exposed via REST in 1.1.
+13. **Single-file upload per request** — multipart upload of one file; batch upload deferred.
+14. **Max upload body size** — configurable via env `MAX_UPLOAD_BYTES` (default `100MB`); separate from volume quota.
+15. **Delete protection** — regular users cannot delete a volume that still contains files; admin may force-delete the entire volume tree with explicit confirmation.
+16. **Subfolders in UI** — users can create directories inside `userdata/` from the file browser.
 
 ---
 
 ## Objective
 
-Set up the complete technical environment before any visible functional development (volumes, files, plugins, tasks).
+Implement the core storage primitive: users create volumes on chosen disks, upload files to `./userdata`, browse and download them, and see volume metadata in the UI. Uploads are rejected when they violate the volume's extension filter or quota.
 
-**Who:** Experienced self-hosters who clone the repo and run `docker compose up`.
+**Who:** Self-hosters who already run lcloud via Docker and understand that volumes are real directories on their disks.
 
 **User stories:**
 
 | ID | Story |
 |---|---|
-| UC0.1 | As a deployer, I clone the repo, copy `.env.example` to `.env`, run `docker compose up`, open `http://localhost:8080`, and see the login page styled per the design system. |
-| UC0.2 | As an admin, I log in with credentials from `.env`, land on an empty dashboard shell, and can navigate placeholder routes without errors. |
-| UC0.3 | As an admin, I can create additional user accounts via API (admin-only); regular users cannot self-register. |
+| UC1.1 | As a user, I create a volume "Photos" on disk `disk1`, set a 50 GB quota and an allowlist filter `.jpg .png .webp`. |
+| UC1.2 | As a user, I upload a photo — it appears in the file browser. I download it back and get identical bytes. |
+| UC1.3 | As a user, I try to upload a `.mp4` to a JPG-only volume — upload is rejected with a clear error. |
+| UC1.4 | As a user, I list my volumes, rename one, and delete an empty volume. |
+| UC1.5 | As a user, I only see my own volumes; as admin, I see all volumes. |
+| UC1.6 | As a user, when I upload an image, a thumbnail is generated and visible in the file browser. |
 
-**Out of scope for Phase 0:**
+**Out of scope for Phase 1.1:**
 
-- Volume CRUD, file upload/download, indexing, plugins, tasks, monitoring
-- User management UI (API only for admin user creation)
-- Production-grade migration tooling, CI pipeline, reverse proxy setup
-- Password reset, email verification, OAuth
+- Monitoring dashboard, space stats UI, multi-disk unified list (Phase 1.2)
+- Bleve search API and search UI (Phase 1.2)
+- Plugin system and event bus (Phase 1.3)
+- Task scheduler and macros (Phase 1.4)
+- Volume re-import wizard
+- File move/rename within volume (defer unless trivial; not in end criterion)
+- Video thumbnail generation
+- Encryption implementation (stub only in `.volume.json`)
+- Content search (metadata-only indexing)
 
 ---
 
@@ -48,13 +63,12 @@ Set up the complete technical environment before any visible functional developm
 
 See [docs/project.md — Tech Stack](./docs/project.md#tech-stack).
 
-Phase 0 uses only the subset needed for bootstrap:
+Phase 1.1 adds:
 
-| Layer | Choices |
+| Layer | Addition |
 |---|---|
-| Backend | Go 1.25+, Gin, GORM, PostgreSQL 17, golang-jwt/jwt v5 |
-| Frontend | React 19, Vite 8, TypeScript, Tailwind CSS, shadcn/ui, React Router, TanStack Query, Zustand |
-| Infra | Docker Compose (Go service + PostgreSQL 17) |
+| Backend | Bleve v2 (`VolumeIndexer`), Go stdlib `image` for thumbnails *(see OQ3 — pending confirmation)* |
+| Frontend | TanStack Query for volume/file data; file upload via `FormData` |
 
 ---
 
@@ -62,72 +76,66 @@ Phase 0 uses only the subset needed for bootstrap:
 
 ### Prerequisites
 
-```bash
-# Required on host for local dev (optional if Docker-only)
-go version    # 1.25+
-node -v       # 20+
-docker compose version
-```
+Same as Phase 0 — Go 1.25+, Node 20+, Docker Compose.
 
-### Bootstrap (first time)
+### Development
 
 ```bash
-git clone https://github.com/<username>/lcloud
-cd lcloud
-cp .env.example .env
-# Edit .env — set POSTGRES_*, JWT_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD, STORAGE_BASE_PATH
-docker compose up -d --build
-```
-
-### Runtime
-
-```bash
-# Full stack (production-like)
-docker compose up -d
-docker compose logs -f app
-
-# Tear down
-docker compose down
-```
-
-### Backend (local dev, outside Docker)
-
-```bash
-go mod tidy
-go run ./cmd/server
-go test ./...
+# Backend tests (volume + indexer focus)
+go test ./internal/volume/... ./internal/indexer/... -cover
 go test ./... -cover
+
+# Frontend tests
+cd web && npm run test
+
+# Local stack with multiple disk mounts (example)
+cp .env.example .env
+mkdir -p ./data/disks/ssd ./data/disks/hdd1 ./data/disks/hdd2
+docker compose up -d --build
+docker compose logs -f app
 ```
 
-### Frontend (local dev with hot reload)
+### Verification (Phase 1.1 done)
 
 ```bash
-cd web
-npm install
-npm run dev          # Vite dev server (proxies API to backend)
-npm run build        # Production build → embedded by Go server
-npm run test         # Vitest
-npm run lint         # ESLint (if configured)
-```
-
-### Verification (Phase 0 done)
-
-```bash
-# 1. Stack healthy
-docker compose ps
-curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/          # expect 200 (SPA)
-curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/health  # expect 200
-
-# 2. Login
-curl -s -X POST http://localhost:8080/api/auth/login \
+# 1. Login and capture token
+TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"<ADMIN_EMAIL>","password":"<ADMIN_PASSWORD>"}'
-# expect 200 + JWT
+  -d '{"email":"<ADMIN_EMAIL>","password":"<ADMIN_PASSWORD>"}' \
+  | jq -r '.access_token')
 
-# 3. Protected route
-curl -s http://localhost:8080/api/auth/me \
-  -H "Authorization: Bearer <token>"
-# expect 200 + user payload
+# 2. List available disks
+curl -s http://localhost:8080/api/disks \
+  -H "Authorization: Bearer $TOKEN"
+
+# 3. Create volume
+VOL=$(curl -s -X POST http://localhost:8080/api/volumes \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Photos","disk_path":"/data/storage/disk1","quota_bytes":53687091200,"filters":{"mode":"allow","extensions":[".jpg",".png",".webp"]}}')
+VOL_ID=$(echo "$VOL" | jq -r '.id')
+
+# 4. Upload allowed file
+curl -s -X POST "http://localhost:8080/api/volumes/$VOL_ID/files" \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@./test.jpg" \
+  -F "path=."
+
+# 5. Reject disallowed file (expect 422)
+curl -s -o /dev/null -w "%{http_code}" -X POST "http://localhost:8080/api/volumes/$VOL_ID/files" \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@./test.mp4" \
+  -F "path=."
+# expect 422
+
+# 6. List files
+curl -s "http://localhost:8080/api/volumes/$VOL_ID/files?path=." \
+  -H "Authorization: Bearer $TOKEN"
+
+# 7. Download
+curl -s "http://localhost:8080/api/volumes/$VOL_ID/files/content?path=test.jpg" \
+  -H "Authorization: Bearer $TOKEN" -o /tmp/downloaded.jpg
+cmp test.jpg /tmp/downloaded.jpg  # expect identical
 ```
 
 ---
@@ -136,263 +144,379 @@ curl -s http://localhost:8080/api/auth/me \
 
 See [docs/project.md — Project structure](./docs/project.md#project-structure).
 
-Phase 0 creates these paths (empty dirs get `.gitkeep` where needed):
+Phase 1.1 creates or extends:
 
 ```
 lcloud/
-├── cmd/server/main.go              ← entry: DB connect, migrate, seed admin, Gin, static SPA
 ├── internal/
-│   ├── auth/
-│   │   ├── model.go                ← User GORM model
-│   │   ├── service.go              ← login, create user, password hash
-│   │   ├── middleware.go           ← JWT validation, role checks
-│   │   └── service_test.go
 │   ├── volume/
-│   │   └── model.go                ← Volume GORM model (schema only)
-│   ├── api/
-│   │   ├── router.go               ← route registration
-│   │   ├── auth_handler.go
-│   │   └── admin_handler.go        ← admin user creation
-│   └── config/
-│       └── config.go               ← env loading
-├── pkg/
-│   └── httputil/                   ← shared JSON helpers, error responses
-├── web/
-│   ├── src/
-│   │   ├── main.tsx
-│   │   ├── App.tsx
-│   │   ├── pages/
-│   │   │   ├── LoginPage.tsx
-│   │   │   └── DashboardPage.tsx   ← empty shell
-│   │   ├── components/
-│   │   │   ├── layout/             ← AppShell, Sidebar, Header
-│   │   │   └── ui/                 ← shadcn components
-│   │   ├── hooks/
-│   │   ├── lib/
-│   │   │   ├── api.ts              ← fetch wrapper + auth header
-│   │   │   └── utils.ts
-│   │   └── store/
-│   │       └── auth.ts             ← Zustand auth store
-│   ├── index.html
-│   ├── package.json
-│   ├── vite.config.ts
-│   ├── tailwind.config.ts
-│   └── tsconfig.json
-├── plugins/.gitkeep
-├── docs/adr/.gitkeep
-├── docker-compose.yml
-├── Dockerfile                      ← multi-stage: build web → build Go → runtime
-├── go.mod
-├── go.sum
-├── .env.example
-└── .gitignore
+│   │   ├── model.go                 ← extend GORM model (filters JSON, root_path)
+│   │   ├── volume_json.go           ← .volume.json read/write (source of truth)
+│   │   ├── service.go               ← CRUD, sync PG ↔ .volume.json
+│   │   ├── file_service.go          ← upload, download, list, delete
+│   │   ├── disk.go                  ← disk discovery under STORAGE_BASE_PATH
+│   │   ├── filter.go                ← extension allow/block validation
+│   │   ├── quota.go                 ← usage calculation + enforcement
+│   │   ├── thumbnail.go             ← image thumbnail generation
+│   │   ├── metadata_cache.go        ← ./cache/metadata/ per-file JSON
+│   │   ├── paths.go                 ← safe path resolution (anti-traversal)
+│   │   └── *_test.go
+│   ├── indexer/
+│   │   ├── indexer.go               ← VolumeIndexer interface
+│   │   ├── bleve.go                 ← BleveIndexer implementation
+│   │   ├── types.go                 ← FileMetadata, SearchQuery
+│   │   └── bleve_test.go
+│   └── api/
+│       ├── volume_handler.go
+│       ├── file_handler.go
+│       ├── disk_handler.go
+│       └── router.go                ← register new routes
+├── web/src/
+│   ├── pages/
+│   │   ├── VolumesPage.tsx          ← list + create volume
+│   │   └── VolumeDetailPage.tsx     ← file browser + upload
+│   ├── components/volumes/          ← VolumeCard, CreateVolumeForm, FileBrowser, UploadZone
+│   ├── hooks/
+│   │   ├── useVolumes.ts
+│   │   └── useVolumeFiles.ts
+│   └── lib/api.ts                   ← volume/file API methods
+└── .env.example                     ← add MAX_UPLOAD_BYTES
 ```
 
-Modules **not** created in Phase 0 (stub folders optional, no implementation): `monitoring/`, `indexer/`, `plugin/`, `task/`.
+On volume creation, the service creates this tree on disk:
+
+```
+{disk_path}/{volume_uuid}/
+├── .volume.json
+├── userdata/
+├── cache/
+│   ├── index/
+│   ├── thumbnails/
+│   └── metadata/
+├── plugins/
+└── logs/
+```
 
 ---
 
 ## Data models
 
-### User (`internal/auth/model.go`)
+### `.volume.json` (source of truth)
+
+Written atomically on every config change. PostgreSQL is synced after a successful disk write.
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "Photos",
+  "owner_id": "660e8400-e29b-41d4-a716-446655440001",
+  "quota_bytes": 53687091200,
+  "filters": {
+    "mode": "allow",
+    "extensions": [".jpg", ".png", ".webp"]
+  },
+  "encryption": {
+    "enabled": false,
+    "method": null
+  },
+  "created_at": "2026-07-01T12:00:00Z",
+  "disk_path": "/data/storage/disk1"
+}
+```
+
+**Rules:**
+
+- Any config mutation → update `.volume.json` first → then upsert PostgreSQL row.
+- Volume delete → remove directory tree from disk → delete PG row → close Bleve index.
+- `id` and `disk_path` are immutable after creation.
+
+### GORM `Volume` (PostgreSQL cache)
+
+Extends Phase 0 model:
 
 | Field | Type | Notes |
 |---|---|---|
-| `id` | UUID (PK) | Generated on create |
-| `email` | string, unique, not null | Login identifier |
-| `password_hash` | string, not null | bcrypt |
-| `role` | enum: `admin` \| `user` | Default `user` |
-| `created_at` | timestamp | Auto |
-| `updated_at` | timestamp | Auto |
+| `id` | UUID (PK) | Same as `.volume.json` id |
+| `name` | string | Display name (rename updates `.volume.json`) |
+| `owner_id` | UUID (FK) | Owner |
+| `disk_path` | string | Parent directory (immutable) |
+| `root_path` | string | `{disk_path}/{id}` — denormalized for queries |
+| `quota_bytes` | int64 | `0` = unlimited |
+| `filters` | JSONB | `{ mode, extensions }` |
+| `used_bytes` | int64 | Cached aggregate; refreshed on upload/delete |
+| `created_at` | timestamp | |
+| `updated_at` | timestamp | |
 
-### Volume (`internal/volume/model.go`)
+### File metadata cache (`./cache/metadata/{file_id}.json`)
 
-Base schema only — aligned with future `.volume.json` fields ([docs/project.md](./docs/project.md#volume-structure-on-disk)):
+```json
+{
+  "id": "file-uuid",
+  "name": "vacation.jpg",
+  "relative_path": "vacation.jpg",
+  "mime_type": "image/jpeg",
+  "size_bytes": 2048576,
+  "sha256": "abc123…",
+  "modified_at": "2026-07-01T12:05:00Z",
+  "thumbnail_path": "cache/thumbnails/file-uuid.jpg"
+}
+```
 
-| Field | Type | Notes |
-|---|---|---|
-| `id` | UUID (PK) | Matches future volume UUID |
-| `name` | string | Display name |
-| `owner_id` | UUID (FK → users) | Owner reference |
-| `disk_path` | string | Physical path (unused until Phase 1.1) |
-| `quota_bytes` | int64 | Default 0 |
-| `created_at` | timestamp | Auto |
-| `updated_at` | timestamp | Auto |
+### Bleve document (via `FileMetadata`)
 
-### RefreshToken (`internal/auth/model.go`)
-
-| Field | Type | Notes |
-|---|---|---|
-| `id` | UUID (PK) | |
-| `user_id` | UUID (FK → users) | |
-| `token_hash` | string | SHA-256 of opaque token |
-| `expires_at` | timestamp | Default now + 7 days |
-| `revoked_at` | timestamp, nullable | Set on logout or rotation |
-| `created_at` | timestamp | Auto |
-
-No volume API endpoints in Phase 0.
+Indexed fields: `name`, `relative_path`, `mime_type`, `size_bytes`, `modified_at`, `sha256`.
 
 ---
 
-## API (Phase 0)
+## API (Phase 1.1)
 
-Base path: `/api`
+Base path: `/api`. All endpoints require JWT unless noted.
+
+**Error shape** (unchanged from Phase 0):
+
+```json
+{ "error": "human-readable message", "code": "FILE_FILTER_REJECTED" }
+```
+
+### Disks
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `GET` | `/health` | Public | `{ "status": "ok" }` — liveness |
-| `POST` | `/auth/login` | Public | `{ email, password }` → `{ access_token, refresh_token, user }` |
-| `POST` | `/auth/refresh` | Public | `{ refresh_token }` → `{ access_token, refresh_token? }` (rotation optional) |
-| `POST` | `/auth/logout` | JWT or refresh | Invalidates refresh token server-side |
-| `GET` | `/auth/me` | JWT (access) | Current user profile |
-| `POST` | `/admin/users` | JWT + admin | `{ email, password, role? }` → created user (no password in response) |
+| `GET` | `/disks` | JWT | List registered physical disks (`STORAGE_DISK_PATHS`) with space stats |
 
-**Error shape (all endpoints):**
+**Response:**
 
 ```json
-{ "error": "human-readable message", "code": "INVALID_CREDENTIALS" }
+{
+  "disks": [
+    {
+      "path": "/data/disks/ssd",
+      "name": "ssd",
+      "label": "SSD",
+      "total_bytes": 1000000000000,
+      "free_bytes": 800000000000
+    },
+    {
+      "path": "/data/disks/hdd1",
+      "name": "hdd1",
+      "label": "HDD 1",
+      "total_bytes": 4000000000000,
+      "free_bytes": 3200000000000
+    }
+  ]
+}
 ```
 
-**Access token (JWT):** claims `sub`, `email`, `role`, `exp` — default **24h**, configurable via `JWT_EXPIRY_HOURS`.
+**Disk registry:**
 
-**Refresh token:** opaque random token (not a JWT), persisted hashed in PostgreSQL (`refresh_tokens` table: `user_id`, `token_hash`, `expires_at`, `revoked_at`). Default lifetime **7 days**, configurable via `REFRESH_TOKEN_EXPIRY_DAYS`. Rotated on each `/auth/refresh` call (old token revoked, new one issued).
+- Primary: `STORAGE_DISK_PATHS` — comma-separated absolute paths, each mapped to a distinct physical disk in `docker-compose.yml`.
+- Each path must exist, be a directory, and be writable; invalid entries are skipped with a startup warning.
+- Display `name` = last path segment; optional `label` from env `STORAGE_DISK_LABELS` (same order, comma-separated) for human-friendly UI labels.
+- Fallback (local dev only): if `STORAGE_DISK_PATHS` is empty, scan immediate subdirectories of `STORAGE_BASE_PATH`.
+
+**Example `docker-compose.yml` mounts:**
+
+```yaml
+volumes:
+  - ${DISK_SSD:-./data/disks/ssd}:/data/disks/ssd
+  - ${DISK_HDD1:-./data/disks/hdd1}:/data/disks/hdd1
+  - ${DISK_HDD2:-./data/disks/hdd2}:/data/disks/hdd2
+environment:
+  STORAGE_DISK_PATHS: /data/disks/ssd,/data/disks/hdd1,/data/disks/hdd2
+  STORAGE_DISK_LABELS: SSD,HDD 1,HDD 2
+```
+
+### Volumes
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/volumes` | JWT | List volumes (owner-scoped; admin sees all) |
+| `POST` | `/volumes` | JWT | Create volume |
+| `GET` | `/volumes/:id` | JWT | Get volume detail + usage |
+| `PATCH` | `/volumes/:id` | JWT | Rename, update quota/filters (owner or admin) |
+| `DELETE` | `/volumes/:id` | JWT | Delete volume (see delete rules below) |
+
+**Create request:**
+
+```json
+{
+  "name": "Photos",
+  "disk_path": "/data/storage/disk1",
+  "quota_bytes": 53687091200,
+  "filters": {
+    "mode": "allow",
+    "extensions": [".jpg", ".png", ".webp"]
+  }
+}
+```
+
+**Volume response (representative fields):**
+
+```json
+{
+  "id": "…",
+  "name": "Photos",
+  "owner_id": "…",
+  "disk_path": "/data/storage/disk1",
+  "quota_bytes": 53687091200,
+  "used_bytes": 2048576,
+  "filters": { "mode": "allow", "extensions": [".jpg", ".png", ".webp"] },
+  "created_at": "…",
+  "updated_at": "…"
+}
+```
+
+**Authorization:**
+
+- Regular user: CRUD only on volumes where `owner_id = sub`.
+- Admin: read/write all volumes.
+
+**Delete rules (validated OQ1):**
+
+| Actor | Volume state | Behavior |
+|---|---|---|
+| Regular user | Contains files | **Rejected** — `422 VOLUME_NOT_EMPTY` |
+| Regular user | Empty (`userdata/` has no files) | Delete allowed — removes disk tree + PG row |
+| Admin | Contains files | Delete with `?force=true` — recursive wipe of entire volume directory after UI confirmation |
+| Admin | Empty | Delete allowed (no `force` required) |
+
+**Validation errors (422):**
+
+| Code | Condition |
+|---|---|
+| `DISK_NOT_FOUND` | `disk_path` not under allowed storage roots |
+| `DISK_NOT_WRITABLE` | Target disk not writable |
+| `VOLUME_NAME_TAKEN` | Same owner already has a volume with that name |
+| `INVALID_FILTER` | Unknown mode or empty extensions when mode is set |
+| `QUOTA_EXCEEDED` | Upload would exceed `quota_bytes` |
+| `FILE_FILTER_REJECTED` | Extension not allowed / blocked |
+| `PATH_TRAVERSAL` | Resolved path escapes `userdata/` |
+| `VOLUME_NOT_EMPTY` | Non-admin delete rejected when files remain |
+
+### Files
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/volumes/:id/files` | JWT | List directory contents (`?path=` relative to `userdata/`, default `.`) |
+| `POST` | `/volumes/:id/files/directories` | JWT | Create subdirectory (`{ "path": "2024/vacation" }`) |
+| `POST` | `/volumes/:id/files` | JWT | Upload file (`multipart/form-data`: `file`, optional `path` target dir) |
+| `GET` | `/volumes/:id/files/content` | JWT | Download file (`?path=`) |
+| `GET` | `/volumes/:id/files/thumbnail` | JWT | Thumbnail for image (`?path=`); 404 if not an image |
+| `DELETE` | `/volumes/:id/files` | JWT | Delete file (`?path=`) |
+
+**List response:**
+
+```json
+{
+  "path": ".",
+  "entries": [
+    {
+      "name": "vacation.jpg",
+      "path": "vacation.jpg",
+      "type": "file",
+      "size_bytes": 2048576,
+      "mime_type": "image/jpeg",
+      "modified_at": "…",
+      "has_thumbnail": true
+    },
+    {
+      "name": "2024",
+      "path": "2024",
+      "type": "directory"
+    }
+  ]
+}
+```
+
+**Upload flow (service layer):**
+
+1. Resolve and validate path (no traversal).
+2. Validate extension against volume filter.
+3. Check quota (`used_bytes + file_size <= quota_bytes`; skip if quota is 0).
+4. Write file to `userdata/`.
+5. Compute SHA256, detect MIME, write metadata cache JSON.
+6. Generate thumbnail if image.
+7. Index via `VolumeIndexer.Index`.
+8. Update `used_bytes` in `.volume.json` + PostgreSQL.
 
 ---
 
-## Frontend (Phase 0)
+## Frontend (Phase 1.1)
+
+Follow [design/DESIGN.md](./design/DESIGN.md): dark canvas, yellow primary CTAs, card surfaces, stat numbers in yellow where relevant.
 
 ### Routes
 
 | Path | Access | Content |
 |---|---|---|
-| `/login` | Public | Login form (email + password), yellow primary CTA per design system |
-| `/` | Protected | Redirect to `/dashboard` |
-| `/dashboard` | Protected | Empty shell — sidebar + header + "Welcome" placeholder |
-| `/volumes` | Protected | Placeholder ("Phase 1.1") |
-| `/monitoring` | Protected | Placeholder ("Phase 1.2") |
-| `/plugins` | Protected | Placeholder ("Phase 1.3") |
-| `/tasks` | Protected | Placeholder ("Phase 1.4") |
-| `/settings` | Protected | Placeholder (system preferences) |
-| `/settings/users` | Protected, admin | Placeholder ("Phase 0 — API only") |
-| `*` | — | 404 page within app shell |
+| `/volumes` | Protected | Volume list + "Create volume" action |
+| `/volumes/:id` | Protected | Volume detail: metadata header + file browser |
 
-### Sidebar navigation (Phase 0 skeleton)
+Remove the "Soon" badge from the Volumes sidebar item when Phase 1.1 ships.
 
-Grouped layout aligned with MVP phases — all non-dashboard items show a "Soon" badge until their phase ships:
+### `/volumes` — Volume list
 
-| Group | Item | Route | Phase |
-|---|---|---|---|
-| — | Dashboard | `/dashboard` | 0 (active) |
-| Storage | Volumes | `/volumes` | 1.1 |
-| Storage | Monitoring | `/monitoring` | 1.2 |
-| Extend | Plugins | `/plugins` | 1.3 |
-| Extend | Tasks | `/tasks` | 1.4 |
-| System | Settings | `/settings` | 0 (placeholder) |
-| System | Users *(admin only)* | `/settings/users` | 0 (API only) |
+- Card grid or table: name, disk, used/quota bar, filter summary, created date.
+- Primary CTA: **Create volume** (yellow button).
+- Create form (modal or slide-over):
+  - Name (required)
+  - Disk selector (dropdown from `GET /api/disks`, show free space)
+  - Quota (optional, GB input → bytes; empty = unlimited)
+  - Filter mode toggle: Allow / Block
+  - Extensions input (comma-separated or tag input → normalized)
+- Row actions: Open, Rename, Delete (with confirmation; non-admin blocked if volume not empty).
+- Admin delete on non-empty volume: second confirmation step warning that all files will be permanently deleted.
 
-Logout action in sidebar footer (not a route).
+### `/volumes/:id` — File browser
 
-### Auth flow
+- Breadcrumb navigation within `userdata/`.
+- **New folder** action — creates a subdirectory in the current path (validated OQ2).
+- File table: name, size, modified date, thumbnail preview for images.
+- Upload zone (drag-and-drop + file picker) respecting current directory path.
+- Download action per file.
+- Clear inline error when filter rejects upload (red accent per design system).
+- Empty state when volume has no files.
 
-1. Unauthenticated access to protected routes → redirect `/login`
-2. Login success → store `access_token` (Zustand + sessionStorage) and `refresh_token` (httpOnly cookie preferred; fallback secure sessionStorage for Phase 0 if cookie setup deferred) → navigate `/dashboard`
-3. TanStack Query fetches `/api/auth/me` on app load when access token present
-4. On 401 from API → silent refresh via `POST /auth/refresh` → retry request; if refresh fails → logout
-5. Logout calls `POST /auth/logout`, clears tokens, redirects `/login`
+### Data fetching
 
-### Design integration
-
-- Tailwind theme tokens mapped from [design/DESIGN.md](./design/DESIGN.md): `canvas`, `primary`, `surface-card`, `hairline`, etc.
-- shadcn/ui initialized in dark mode; components use design tokens
-- Fonts: Inter (UI), JetBrains Mono (code snippets if any)
-- No feature UI beyond login + empty dashboard shell
-
----
-
-## Docker & environment
-
-### `docker-compose.yml`
-
-Services:
-
-| Service | Image / build | Ports | Notes |
-|---|---|---|---|
-| `app` | `Dockerfile` build | `8080:8080` | Go + embedded SPA |
-| `postgres` | `postgres:17` | internal only | Persistent volume |
-
-`app` depends on `postgres` (healthcheck before start).
-
-### `.env.example` variables
-
-| Variable | Required | Description |
-|---|---|---|
-| `POSTGRES_USER` | yes | DB user |
-| `POSTGRES_PASSWORD` | yes | DB password |
-| `POSTGRES_DB` | yes | Database name |
-| `DATABASE_URL` | auto | Composed in compose; documented for local dev |
-| `JWT_SECRET` | yes | Access token signing key (min 32 chars) |
-| `JWT_EXPIRY_HOURS` | no | Access token lifetime; default `24` |
-| `REFRESH_TOKEN_EXPIRY_DAYS` | no | Refresh token lifetime; default `7` |
-| `ADMIN_EMAIL` | yes | Seed admin email |
-| `ADMIN_PASSWORD` | yes | Seed admin password (min 8 chars) |
-| `STORAGE_BASE_PATH` | yes | Host path mounted for future volumes (e.g. `./data/storage`) |
-| `APP_PORT` | no | Default `8080` |
-| `GIN_MODE` | no | Default `release` in Docker |
-
-### Dockerfile (multi-stage)
-
-1. **web-builder** — `npm ci && npm run build`
-2. **go-builder** — `go build` with embedded `web/dist`
-3. **runtime** — Alpine + ca-certs; non-root user; expose 8080
+- TanStack Query hooks: `useVolumes`, `useVolume`, `useVolumeFiles`, `useDisks`.
+- Optimistic invalidation after upload/delete/create.
+- Upload progress indicator (basic percentage if feasible; otherwise spinner).
 
 ---
 
 ## Code Style
 
-### Go
+### Go — volume service pattern
 
-Follow standard Go conventions. Handlers are thin; business logic lives in services.
+Handlers stay thin; all disk I/O and business rules in `internal/volume/`.
 
 ```go
-// internal/api/auth_handler.go — handler calls service, maps errors to HTTP
-func (h *AuthHandler) Login(c *gin.Context) {
-    var req LoginRequest
-    if err := c.ShouldBindJSON(&req); err != nil {
-        httputil.BadRequest(c, "invalid request body")
-        return
-    }
-    result, err := h.authService.Login(c.Request.Context(), req.Email, req.Password)
+// internal/volume/file_service.go — upload validates before write
+func (s *FileService) Upload(ctx context.Context, vol *Volume, relPath string, r io.Reader, size int64) (*FileEntry, error) {
+    absPath, err := s.paths.ResolveUserdata(vol.RootPath, relPath)
     if err != nil {
-        httputil.Unauthorized(c, "invalid credentials")
-        return
+        return nil, err
     }
-    httputil.JSON(c, http.StatusOK, result)
+    if err := s.filters.Validate(vol.Filters, filepath.Base(absPath)); err != nil {
+        return nil, err
+    }
+    if err := s.quota.Check(vol, size); err != nil {
+        return nil, err
+    }
+    // write → metadata → thumbnail → indexer.Index → sync usage
 }
 ```
 
-- Package naming: lowercase, no underscores
-- Errors: sentinel errors in service layer; never leak internal details in HTTP responses
-- Context passed as first arg to service methods
+- All path operations go through `paths.go` — never concatenate user input into filesystem paths directly.
+- Bleve accessed only through `internal/indexer/` — never import Bleve outside that package.
+- Atomic `.volume.json` writes: write temp file + rename.
 
-### TypeScript / React
+### TypeScript
 
-- Functional components only; named exports for pages
-- Colocate component-specific types in the same file unless shared
-- API calls through `lib/api.ts`; no raw fetch in page components
-- Tailwind utility classes; avoid inline styles
-
-```tsx
-// web/src/pages/LoginPage.tsx — pattern
-export function LoginPage() {
-  const login = useAuthStore((s) => s.login);
-  // form state, submit → api.login → store token → navigate
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-canvas">
-      {/* shadcn Card + Input + Button variant="default" (yellow CTA) */}
-    </main>
-  );
-}
-```
+- Page components orchestrate; presentational components in `components/volumes/`.
+- Upload uses `FormData` via `api.uploadFile()` helper (not JSON body).
+- Display bytes with human-readable formatter (shared util).
 
 ---
 
@@ -400,20 +524,22 @@ export function LoginPage() {
 
 See [docs/project.md — Coverage targets](./docs/project.md#coverage-targets).
 
-| Layer | Framework | Location | Phase 0 focus |
-|---|---|---|---|
-| Backend unit | Go testing + testify | `internal/*/*_test.go` | Auth service: hash, login, JWT issue/validate, admin seed |
-| Backend integration | Go testing + testify | `internal/api/*_test.go` | Login + `/me` + admin create user (test DB or sqlite stub if feasible) |
-| Frontend unit | Vitest + Testing Library | `web/src/**/*.test.tsx` | LoginPage render, auth store, protected route redirect |
+| Layer | Focus | Location |
+|---|---|---|
+| Backend unit | Filter validation, path traversal rejection, quota math, `.volume.json` sync | `internal/volume/*_test.go` |
+| Backend unit | BleveIndexer Index/Delete/Search/Rebuild | `internal/indexer/bleve_test.go` |
+| Backend integration | Volume CRUD + upload/download round-trip (temp dir as disk) | `internal/volume/service_test.go`, `internal/api/*_test.go` |
+| Frontend unit | CreateVolumeForm validation, file browser render, upload error display | `web/src/**/*.test.tsx` |
 
-**Coverage target for Phase 0 critical path (auth):** 80% on `internal/auth/`.
+**Coverage target:** 80% minimum on `internal/volume/` and `internal/indexer/`.
 
 **Verify before ship:**
 
 ```bash
-go test ./... -cover
+go test ./internal/volume/... ./internal/indexer/... -cover
+go test ./...
 cd web && npm run test
-docker compose up -d --build && manual UC0.1 + UC0.2
+# Manual UC1.1 – UC1.3 via UI + curl script above
 ```
 
 ---
@@ -422,64 +548,74 @@ docker compose up -d --build && manual UC0.1 + UC0.2
 
 ### Always
 
-- Run `go test ./...` and `npm run test` before marking phase complete
-- Handlers call services only — no business logic in `internal/api/`
-- Reference [docs/project.md](./docs/project.md) for stack/structure — do not duplicate into other docs
-- Follow [design/DESIGN.md](./design/DESIGN.md) for any UI work
-- Keep `.env` out of git; maintain `.env.example` with all variables documented
+- Write volume config to `.volume.json` before PostgreSQL.
+- Route all indexing through `VolumeIndexer` interface.
+- Validate paths — reject `..`, absolute paths, and symlinks escaping `userdata/`.
+- Scope volume list/detail to owner; admin bypass explicit in service layer (not only in handlers).
+- Follow [design/DESIGN.md](./design/DESIGN.md) for UI.
+- Run tests before marking phase complete.
 
 ### Ask first
 
-- Adding dependencies not listed in [docs/project.md](./docs/project.md#approved-third-party-libraries)
-- Changing JWT transport (cookie vs Bearer) or token lifetime defaults
-- Adding CI/CD pipeline configuration
-- Any change to Volume model fields that would conflict with future `.volume.json` schema
+- Adding dependencies not in [approved list](./docs/project.md#approved-third-party-libraries) (only if OQ3 chooses an external imaging library).
+- Changing `.volume.json` schema fields (requires ADR).
+- Changing volume directory structure (requires ADR).
+- Exposing Bleve search via REST before Phase 1.2 scope review.
 
 ### Never
 
-- Commit secrets or real `.env` files
-- Public self-registration endpoint
-- Volume CRUD or file operations (Phase 1.1)
-- Direct Bleve, go-plugin, or gocron setup (later phases)
-- Business logic in Gin handlers
-- Duplicating tech stack content outside `docs/project.md`
+- Write volume config exclusively to PostgreSQL.
+- Import Bleve outside `internal/indexer/`.
+- Emit plugin bus events directly from handlers (Phase 1.3).
+- Allow path traversal in file operations.
+- Skip filter/quota checks on upload.
 
 ---
 
 ## Success Criteria
 
-Phase 0 is **done** when all of the following pass:
+Phase 1.1 is **done** when all of the following pass:
 
-- [ ] **SC0.1** `docker compose up -d --build` starts `app` + `postgres` without manual steps beyond `.env`
-- [ ] **SC0.2** `GET http://localhost:8080/` serves the React app; login page matches design system (dark canvas, yellow CTA)
-- [ ] **SC0.3** `GET /api/health` returns 200
-- [ ] **SC0.4** Admin seed: first boot creates admin from `ADMIN_EMAIL` / `ADMIN_PASSWORD` if no users exist
-- [ ] **SC0.5** `POST /api/auth/login` returns access token (24h) + refresh token (7d)
-- [ ] **SC0.6** `GET /api/auth/me` with access token returns user profile; without token returns 401
-- [ ] **SC0.6b** `POST /api/auth/refresh` with valid refresh token returns new access token; expired/revoked token returns 401
-- [ ] **SC0.6c** `POST /api/auth/logout` revokes refresh token — subsequent refresh fails
-- [ ] **SC0.7** `POST /api/admin/users` creates a user when called by admin; returns 403 for non-admin
-- [ ] **SC0.8** GORM AutoMigrate creates `users` and `volumes` tables in PostgreSQL
-- [ ] **SC0.9** Frontend: login → empty dashboard; sidebar navigates to placeholder routes without crash
-- [ ] **SC0.10** Unauthenticated access to `/dashboard` redirects to `/login`
-- [ ] **SC0.11** `.env.example` documents every required variable with comments
-- [ ] **SC0.12** `go test ./...` and `cd web && npm run test` pass
-- [ ] **SC0.13** README local setup instructions match actual behavior
+- [ ] **SC1.1** `GET /api/disks` returns all disks from `STORAGE_DISK_PATHS` with correct free/total space
+- [ ] **SC1.1b** Volumes can be created on different disks; each volume lives under its chosen disk path
+- [ ] **SC1.2** `POST /api/volumes` creates on-disk structure + `.volume.json` + PostgreSQL row
+- [ ] **SC1.3** `.volume.json` fields match PostgreSQL after create and after PATCH
+- [ ] **SC1.4** User lists only own volumes; admin lists all
+- [ ] **SC1.5** Upload to `userdata/` succeeds; file appears in `GET /api/volumes/:id/files`
+- [ ] **SC1.6** Download returns identical bytes to uploaded file
+- [ ] **SC1.7** Upload with disallowed extension returns 422 + `FILE_FILTER_REJECTED`
+- [ ] **SC1.8** Upload exceeding quota returns 422 + `QUOTA_EXCEEDED`
+- [ ] **SC1.9** Path traversal attempts (`../etc/passwd`) rejected with 422
+- [ ] **SC1.10** Image upload generates thumbnail served by thumbnail endpoint
+- [ ] **SC1.11** Bleve index contains uploaded file metadata; delete removes index entry
+- [ ] **SC1.12** Rename volume updates `.volume.json` name without changing directory UUID
+- [ ] **SC1.13** Empty volume delete removes disk tree and PostgreSQL row
+- [ ] **SC1.13b** Non-admin delete of non-empty volume returns `VOLUME_NOT_EMPTY`
+- [ ] **SC1.13c** Admin force-delete removes non-empty volume tree entirely
+- [ ] **SC1.13d** User can create a subfolder from the file browser UI
+- [ ] **SC1.14** UI: create volume flow (UC1.1), file browser + upload + download (UC1.2), filter error (UC1.3)
+- [ ] **SC1.15** Volumes sidebar item active without "Soon" badge
+- [ ] **SC1.16** `go test ./...` and `cd web && npm run test` pass
+- [ ] **SC1.17** `.env.example` documents `MAX_UPLOAD_BYTES`, `STORAGE_DISK_PATHS`, `STORAGE_DISK_LABELS`
 
 ---
 
 ## Implementation order (preview for `/plan`)
 
-Suggested vertical slices — not tasks yet; `/plan` will expand:
+Suggested vertical slices — `/plan` will expand into `tasks/plan.md`:
 
-1. **Scaffold** — `go mod init`, directory tree, `.gitignore`, `.env.example`
-2. **Docker** — `Dockerfile`, `docker-compose.yml`, health endpoint, postgres wiring
-3. **Auth backend** — User model, bcrypt, JWT middleware, login + admin create + seed
-4. **Volume model** — GORM model + migrate only
-5. **Frontend scaffold** — Vite + React + Tailwind + shadcn + design tokens
-6. **Auth frontend** — Login page, auth store, API client, route guards
-7. **Dashboard shell** — Layout, sidebar, placeholder routes
-8. **Integration** — Embed SPA in Go, end-to-end Docker verification
+1. **Volume JSON + paths** — schema, atomic read/write, safe path resolver
+2. **Disk registry** — `STORAGE_DISK_PATHS` config, multi-mount docker-compose, API endpoint
+3. **Volume CRUD service** — create/list/get/patch/delete with PG sync
+4. **Volume API handlers** — REST endpoints + auth scoping
+5. **Filter + quota** — validation primitives + tests
+6. **File service** — upload, list, mkdir, download, delete
+7. **Metadata cache + thumbnails** — sidecar JSON + image resize
+8. **VolumeIndexer + BleveIndexer** — interface, impl, wired on upload/delete
+9. **File API handlers** — multipart upload, content/thumbnail download
+10. **Frontend volumes list** — disks fetch, create form, volume cards
+11. **Frontend file browser** — browse, new folder, upload, download, errors
+12. **Integration** — Docker end-to-end UC1.1–UC1.3
 
 ---
 
@@ -487,31 +623,45 @@ Suggested vertical slices — not tasks yet; `/plan` will expand:
 
 | # | Decision | Status |
 |---|---|---|
-| D1 | Access token lifetime: **24h** (`JWT_EXPIRY_HOURS`, default `24`) | ✅ Validated |
-| D2 | Refresh token lifetime: **7 days** (`REFRESH_TOKEN_EXPIRY_DAYS`, default `7`) | ✅ Validated |
-| D3 | Sidebar: grouped MVP nav with "Soon" badges (see Sidebar navigation) | ✅ Validated |
-| D4 | Docker runtime image: **Alpine** for Phase 0; Distroless before MVP (ADR) | ✅ Validated |
+| D1 | Filter mode: exclusive allow **or** block per volume | ✅ Validated |
+| D2 | Quota `0` = unlimited | ✅ Validated |
+| D3 | Volume directory named by UUID (immutable) | ✅ Aligned with docs/project.md |
+| D4 | Bleve search API deferred to Phase 1.2; indexer built in 1.1 | ✅ Validated |
+| D5 | Multi-disk via `STORAGE_DISK_PATHS` — each physical disk independently mounted | ✅ Validated |
+| D6 | Delete: user blocked if non-empty; admin may `?force=true` with confirmation | ✅ Validated (OQ1) |
+| D7 | Subfolder creation in file browser UI | ✅ Validated (OQ2) |
+| D8 | Thumbnail max size 256×256 px, JPEG output | ✅ Validated (OQ4) |
+
+---
 
 ## Open Questions
 
-| # | Question | Default if unanswered |
+| # | Question | Status |
 |---|---|---|
-| OQ1 | Docker runtime: Alpine vs Distroless? | See comparison in this spec + user choice |
-| OQ2 | Refresh token storage client-side: httpOnly cookie vs sessionStorage? | httpOnly cookie (more secure) |
-| OQ3 | GitHub repo URL for README clone command? | Placeholder `<username>/lcloud` until repo published |
+| OQ3 | **Thumbnail engine** — see explanation below | ⏳ Pending |
+| OQ5 | **Volume ownership on create** — see explanation below | ⏳ Pending |
 
-### Docker runtime image — Alpine vs Distroless
+### OQ3 — Thumbnail engine (plain language)
 
-| | **Alpine** | **Distroless** (Google) |
+When you upload a photo, lcloud generates a **small preview** so the file browser doesn't load full-size images. Two ways to shrink images in Go:
+
+| Option | What it means | Trade-off |
 |---|---|---|
-| **Taille image** | ~5–15 Mo de base + binaire | ~2–5 Mo de base + binaire — plus léger |
-| **Sécurité** | Contient un shell (`sh`) et parfois `apk` — surface d'attaque plus large | Pas de shell, pas de package manager — très difficile à exploiter si compromis |
-| **Debug en prod** | `docker exec -it … sh` — inspecter logs, fichiers, réseau facilement | Pas de shell : debug via logs Docker, métriques, ou image debug séparée |
-| **Compatibilité Go** | Parfois besoin de `libc` musl vs glibc — rares surprises avec Go statique | Go compilé statiquement (`CGO_ENABLED=0`) — excellent fit |
-| **Courbe d'apprentissage** | Standard, documenté partout | Moins intuitif au début ; Dockerfile légèrement plus exigeant |
-| **Recommandation Phase 0** | **Pratique pour bootstrap** — tu itères vite, tu débugues facilement | **Meilleur choix long terme** — aligné avec "production security" dans project.md |
+| **A — Built-in Go tools** (`image` package) | No extra dependency; resize JPG/PNG/GIF/WebP | Simpler setup; photos taken with phone rotation may appear sideways (no EXIF auto-rotate) |
+| **B — Small external library** (`disintegration/imaging`) | Better resize quality + auto-rotation from EXIF | One extra dependency to approve and maintain |
 
-**Suggestion:** Alpine en Phase 0 pour itérer sans friction ; basculer vers Distroless avant MVP ou documenter la migration en ADR.
+**Recommendation:** Option A for Phase 1.1 (keep it simple). Upgrade to B later if rotated previews become a problem.
+
+### OQ5 — Who owns a new volume? (plain language)
+
+When someone clicks **Create volume**, who is recorded as the owner in `.volume.json`?
+
+| Option | Meaning |
+|---|---|
+| **A — Always the logged-in user** | Even the admin creates volumes for themselves only. Other users create their own volumes after logging in. |
+| **B — Admin can assign an owner** | Admin picks a user in the create form (useful if admin sets up storage for family members who don't manage disks). |
+
+**Recommendation:** Option A for Phase 1.1 (simpler). Option B can be added later without changing the volume structure.
 
 ---
 
