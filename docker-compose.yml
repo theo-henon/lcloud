@@ -28,6 +28,7 @@ services:
       STORAGE_DISK_PATHS: ${STORAGE_DISK_PATHS:-/data/disks/ssd,/data/disks/hdd1,/data/disks/hdd2}
       STORAGE_DISK_LABELS: ${STORAGE_DISK_LABELS:-SSD,HDD 1,HDD 2}
       MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-104857600}
+      PLUGINS_PATH: /plugins
       APP_PORT: "8080"
       GIN_MODE: ${GIN_MODE:-release}
     volumes:
@@ -35,6 +36,7 @@ services:
       - ${DISK_SSD:-./data/disks/ssd}:/data/disks/ssd
       - ${DISK_HDD1:-./data/disks/hdd1}:/data/disks/hdd1
       - ${DISK_HDD2:-./data/disks/hdd2}:/data/disks/hdd2
+      - ${PLUGINS_PATH:-./plugins}:/plugins:ro
     depends_on:
       postgres:
         condition: service_healthy

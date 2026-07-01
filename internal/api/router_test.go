@@ -14,6 +14,7 @@ import (
 	"github.com/theo-henon/lcloud/internal/config"
 	"github.com/theo-henon/lcloud/internal/indexer"
 	"github.com/theo-henon/lcloud/internal/monitoring"
+	"github.com/theo-henon/lcloud/internal/plugin"
 	"github.com/theo-henon/lcloud/internal/settings"
 	"github.com/theo-henon/lcloud/internal/volume"
 	"gorm.io/gorm"
@@ -26,7 +27,7 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *auth.Service, *volume.Service,
 	dsn := "file:" + t.Name() + "?mode=memory&cache=private"
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&auth.User{}, &auth.RefreshToken{}, &volume.Volume{}, &settings.InstanceSettings{}))
+	require.NoError(t, db.AutoMigrate(&auth.User{}, &auth.RefreshToken{}, &volume.Volume{}, &settings.InstanceSettings{}, &plugin.Plugin{}, &plugin.PluginLogEntry{}))
 
 	service := auth.NewService(db, "01234567890123456789012345678901", 24, 7)
 	require.NoError(t, service.SeedAdmin("admin@example.com", "adminpass1"))
@@ -45,6 +46,7 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *auth.Service, *volume.Service,
 	volumeService := volume.NewService(db, diskRegistry, indexManager)
 	monitoringService := monitoring.NewService(volumeService, diskRegistry, settingsService)
 	fileService := volume.NewFileService(volumeService, indexManager, cfg.MaxUploadBytes, monitoringService.StatsCache())
+	pluginService := plugin.NewService(db, t.TempDir(), volumeService, nil)
 
 	router := NewRouter(RouterConfig{
 		AuthService:       service,
@@ -53,6 +55,7 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *auth.Service, *volume.Service,
 		FileService:       fileService,
 		MonitoringService: monitoringService,
 		SettingsService:   settingsService,
+		PluginService:     pluginService,
 		IndexManager:      indexManager,
 		MaxUploadBytes:    cfg.MaxUploadBytes,
 		GinMode:           gin.TestMode,

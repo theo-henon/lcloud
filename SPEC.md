@@ -1,54 +1,52 @@
-# Spec: Phase 1.2 — Monitoring
+# Spec: Phase 1.3 — Plugin system
 
 > **Status:** Draft — pending review
-> **Scope:** Volume visibility — space stats, file type breakdown, multi-disk overview, disk name masking, Bleve search.
-> **Prerequisite:** Phase 1.1 complete (volume CRUD, file ops, metadata cache, Bleve indexer wired on upload/delete).
-> **Sources:** [STARTUP.md](./STARTUP.md#phase-12--monitoring), [VISION.md](./VISION.md), [docs/project.md](./docs/project.md)
+> **Scope:** Event bus, go-plugin runtime, plugin registry, plugin manager UI, example `file-type-validator` plugin, SDK stub.
+> **Prerequisite:** Phase 1.1 complete (volumes, files, filters, layout with `plugins/` dir). Phase 1.2 complete (monitoring, search) recommended but not blocking for plugin wiring.
+> **Sources:** [STARTUP.md](./STARTUP.md#phase-13--plugin-system), [VISION.md](./VISION.md), [docs/project.md](./docs/project.md)
 
 ---
 
 ## Assumptions (correct me now or I proceed)
 
-1. **Phase 1.1 is shipped** — volumes, files, metadata cache, Bleve indexation, `GET /api/disks`, `used_bytes` per volume all work.
-2. **`internal/monitoring/` is greenfield** — module referenced in docs but not yet created; Phase 1.2 creates it.
-3. **Stats source of truth for breakdown** — file type distribution is computed by scanning `./cache/metadata/*.json` (per-file records written in Phase 1.1); `used_bytes` in `.volume.json` remains the source of truth for volume usage totals.
-4. **Aggregated stats are cached on disk** — a single `stats.json` file per volume under `./cache/metadata/` stores precomputed breakdown; invalidated on file upload/delete; recomputed on read or explicit refresh.
-5. **`compute_stats` macro is Phase 1.4** — Phase 1.2 implements the stats computation function and a manual refresh API; Phase 1.4 wires the same function into the task scheduler. No gocron dependency in 1.2.
-6. **Disk name masking is an admin security setting** — stored server-side in PostgreSQL (`instance_settings.mask_disk_names`); the API masks disk paths and labels for all users when enabled, except on `GET /api/disks` for administrators (volume creation). Volume creation (`POST /api/volumes`) is admin-only. Configured in **Settings** (`/settings`).
-7. **Search is volume-scoped** — Bleve index is per-volume; search UI lives on the monitoring page with a volume selector (UC2.4). No cross-volume search in MVP.
-8. **MIME groups match macro vocabulary** — breakdown categories align with Phase 1.4 `sort_by_type` folders: `images`, `documents`, `videos`, `audio`, `archives`, `other`.
-9. **Admin sees all volumes/disks** — same owner-scoping rules as Phase 1.1; monitoring endpoints respect volume ownership.
-10. **No new Bleve fields** — Phase 1.1 already indexes `name`, `relative_path`, `mime_type`, `size_bytes`, `modified_at`, `sha256`; Phase 1.2 adds filter queries on existing fields only.
-11. **Dashboard replaces placeholder** — `/monitoring` becomes the real monitoring page; sidebar "Soon" badge removed when shipped.
-12. **Real-time enough for MVP** — stats refresh on page load + after explicit refresh; no WebSocket push. Upload/delete invalidates stats cache; next read recomputes if needed.
+1. **Phases 1.1–1.2 are shipped** — volume CRUD, file upload/delete, `.volume.json` filters, volume layout includes `./plugins/` and `./logs/`.
+2. **`internal/plugin/` is greenfield** — module referenced in docs but not yet created; Phase 1.3 creates it entirely.
+3. **Plugins are instance-wide binaries** — admin drops executables into a host `plugins/` directory; discovery happens at startup (UC3.1 requires restart, no hot-reload in MVP).
+4. **Core upload filter stays synchronous** — Phase 1.1 `ValidateExtension` still rejects bad files before save; plugins receive `file.uploaded` only after a successful upload. The example plugin is a **post-upload audit** (demonstrates the bus), not a replacement for core validation.
+5. **`file.moved` / `file.renamed` are defined but not emitted yet** — no move/rename API exists in Phase 1.1; event types are registered on the bus, emission deferred until a move operation ships (Phase 1.4 `move_files` macro or a dedicated file API).
+6. **`task.executed` is defined but not emitted yet** — task scheduler is Phase 1.4; bus accepts the event type, emission wired in 1.4.
+7. **Plugin logs are stored in PostgreSQL for UI** — recent activity feed in the plugin manager; optional mirror to `{volume}/logs/` is post-MVP. Keeps `./logs/` directory structure intact without new on-disk schema in 1.3.
+8. **Per-volume plugin data dirs are created lazily** — `{volume.root}/plugins/{plugin-id}/` is created the first time a plugin handles an event for that volume (no separate "install per volume" UI in MVP).
+9. **Enable/disable is admin-only** — toggling a plugin starts/stops its subprocess and controls event delivery.
+10. **One subprocess per plugin binary** — go-plugin spawns an isolated child process; crash marks plugin `error` without taking down lcloud core.
+11. **Plugin API is read-mostly for MVP** — plugins may read volume config (filters, name), emit custom events, write to their volume data dir, and append log entries. No file delete/move via plugin API in 1.3.
+12. **ADR required before merge** — plugin interface contract and event bus design documented in `docs/adr/` via `documentation-and-adrs`.
 
 ---
 
 ## Objective
 
-Give users visibility into their storage: space usage per volume and per disk, file type distribution, a unified multi-disk volume overview, optional disk name masking, and filename/metadata search within a volume.
+Build the foundational plugin infrastructure so users can extend lcloud with external binaries that react to volume events — the extensibility layer described in VISION.md.
 
-**Who:** Self-hosters running lcloud who manage volumes across one or more physical disks and want a single dashboard to understand what's stored where.
+**Who:** Self-hosters and developers who want to customize lcloud behavior without forking the core.
 
 **User stories:**
 
 | ID | Story |
 |---|---|
-| UC2.1 | As a user, I open the monitoring dashboard and see my "Photos" volume at 12 GB / 50 GB with images at 100% of volume content. |
-| UC2.2 | As a user, I add a "Documents" volume on a second disk — both volumes appear in the unified list grouped by disk. |
-| UC2.3 | As an admin, I enable disk name masking in Settings — non-admin users see generic labels (e.g. "Storage 1") instead of real disk paths across the app. |
-| UC2.4 | As a user, I search "vacation" in my Photos volume — matching filenames appear from the Bleve index. |
+| UC3.1 | As an admin, I drop the `file-type-validator` binary into `plugins/`, restart lcloud — the plugin appears in the plugin manager as **running**. |
+| UC3.2 | As a user, I upload a file to a filtered volume — the plugin receives `file.uploaded`, validates it, and a notice appears in the plugin activity feed in the UI. |
 
-**Out of scope for Phase 1.2:**
+**Out of scope for Phase 1.3:**
 
-- Plugin system (Phase 1.3)
-- Task scheduler and `compute_stats` cron (Phase 1.4 — function built here, scheduler wired later)
-- Cross-volume / global search
-- Server-side user preferences persistence
-- Infrastructure monitoring (CPU, RAM, container health)
-- Historical usage trends / time-series graphs
-- Content (full-text) search inside files
-- Alerting (`alert_usage` macro — Phase 1.4)
+- Task scheduler and `task.executed` emission (Phase 1.4)
+- File move/rename API and `file.moved` / `file.renamed` emission
+- Hot-reload of plugins without restart
+- Plugin marketplace / remote registry
+- WASM runtime (IDEAS.md — post-MVP)
+- Plugin file mutations (delete uploaded file on validation failure)
+- Per-volume plugin install wizard (lazy data dir only)
+- Community plugin signing / verification
 - Changes to `.volume.json` schema or volume directory structure
 
 ---
@@ -57,12 +55,15 @@ Give users visibility into their storage: space usage per volume and per disk, f
 
 See [docs/project.md — Tech Stack](./docs/project.md#tech-stack).
 
-Phase 1.2 adds no new dependencies. Reuses:
+Phase 1.3 adds:
 
-| Layer | Reuse |
+| Layer | Addition |
 |---|---|
-| Backend | Bleve v2 (`VolumeIndexer.Search` extended), existing `DiskRegistry`, `MetadataCache` |
-| Frontend | TanStack Query, Settings page (admin security options), shadcn/ui chart primitives or CSS progress bars |
+| Backend | `github.com/hashicorp/go-plugin` — subprocess RPC (GRPC handshake) |
+| Backend | PostgreSQL models: `Plugin`, `PluginLogEntry` |
+| Example | `plugins/file-type-validator/` — reference Go plugin binary + manifest |
+| SDK | `pkg/pluginsdk/` — minimal Go helpers for plugin authors |
+| Docs | `docs/plugins/README.md` — how to write a plugin |
 
 ---
 
@@ -71,47 +72,57 @@ Phase 1.2 adds no new dependencies. Reuses:
 ### Development
 
 ```bash
-# Backend tests (monitoring + indexer search focus)
-go test ./internal/monitoring/... ./internal/indexer/... -cover
+# Add go-plugin dependency (during /build)
+go get github.com/hashicorp/go-plugin
+
+# Build example plugin
+go build -o plugins/file-type-validator ./plugins/file-type-validator
+
+# Backend tests (plugin module focus)
+go test ./internal/plugin/... -cover
 go test ./... -cover
 
 # Frontend tests
 cd web && npm run test
 
-# Local stack
+# Local stack (mount plugins dir — see Docker changes below)
 docker compose up -d --build
 docker compose logs -f app
 ```
 
-### Verification (Phase 1.2 done)
+### Verification (Phase 1.3 done)
 
 ```bash
+# 1. Build and place example plugin
+go build -o plugins/file-type-validator ./plugins/file-type-validator
+cp plugins/file-type-validator.json plugins/file-type-validator.json  # manifest sidecar
+
+# 2. Restart stack
+docker compose up -d --build
+
 TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"<ADMIN_EMAIL>","password":"<ADMIN_PASSWORD>"}' \
   | jq -r '.access_token')
 
+# 3. List plugins — file-type-validator running
+curl -s http://localhost:8080/api/plugins \
+  -H "Authorization: Bearer $TOKEN" | jq
+
+# 4. Upload allowed file → plugin activity log entry
 VOL_ID="<volume-uuid>"
+curl -s -X POST "http://localhost:8080/api/volumes/$VOL_ID/files" \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@photo.png" | jq
 
-# 1. Monitoring overview (disks + volumes + stats)
-curl -s http://localhost:8080/api/monitoring/overview \
+curl -s "http://localhost:8080/api/plugins/logs?limit=10" \
   -H "Authorization: Bearer $TOKEN" | jq
 
-# 2. Volume stats + MIME breakdown
-curl -s "http://localhost:8080/api/monitoring/volumes/$VOL_ID/stats" \
-  -H "Authorization: Bearer $TOKEN" | jq
-
-# 3. Force stats refresh (same logic compute_stats will call in 1.4)
-curl -s -X POST "http://localhost:8080/api/monitoring/volumes/$VOL_ID/stats/refresh" \
-  -H "Authorization: Bearer $TOKEN" | jq
-
-# 4. Search within volume (filename + filters)
-curl -s "http://localhost:8080/api/volumes/$VOL_ID/search?q=vacation&mime_prefix=image/" \
-  -H "Authorization: Bearer $TOKEN" | jq
-
-# 5. Search with size/date filters
-curl -s "http://localhost:8080/api/volumes/$VOL_ID/search?q=&min_size=1048576&modified_after=2026-01-01T00:00:00Z" \
-  -H "Authorization: Bearer $TOKEN" | jq
+# 5. Disable plugin — status stopped, no new log entries on upload
+curl -s -X PATCH "http://localhost:8080/api/plugins/file-type-validator" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": false}' | jq
 ```
 
 ---
@@ -120,422 +131,463 @@ curl -s "http://localhost:8080/api/volumes/$VOL_ID/search?q=&min_size=1048576&mo
 
 See [docs/project.md — Project structure](./docs/project.md#project-structure).
 
-Phase 1.2 creates or extends:
+Phase 1.3 creates or extends:
 
 ```
 lcloud/
 ├── internal/
-│   ├── monitoring/
-│   │   ├── service.go              ← stats computation, overview aggregation
-│   │   ├── stats_cache.go          ← read/write stats.json per volume
-│   │   ├── mime_groups.go          ← MIME → category mapping
-│   │   ├── types.go                ← VolumeStats, DiskOverview, OverviewResponse
-│   │   └── service_test.go
-│   ├── indexer/
-│   │   ├── indexer.go              ← extend SearchQuery with filters
-│   │   ├── bleve.go                ← conjunction query for filters
-│   │   └── bleve_test.go           ← add Search filter tests
-│   ├── volume/
-│   │   └── metadata_cache.go       ← add ListAll(rootPath) for stats scan
-│   └── api/
-│       ├── monitoring_handler.go   ← overview + volume stats endpoints
-│       ├── search_handler.go       ← volume search endpoint
-│       └── router.go               ← register new routes
+│   └── plugin/
+│       ├── eventbus.go           ← in-process pub/sub, typed events
+│       ├── events.go             ← event types + payloads
+│       ├── publisher.go          ← EventPublisher interface (injected into volume services)
+│       ├── runtime.go            ← go-plugin client, subprocess lifecycle
+│       ├── registry.go           ← scan PLUGINS_PATH, load manifests, validate binaries
+│       ├── host_api.go           ← HostAPI served to plugins (Emit, Log, GetVolumeConfig)
+│       ├── service.go            ← orchestration: registry + runtime + bus + logs
+│       ├── model.go              ← GORM Plugin, PluginLogEntry
+│       ├── rpc.go                ← go-plugin GRPC service definitions
+│       └── service_test.go
+├── pkg/
+│   └── pluginsdk/
+│       ├── plugin.go             ← plugin-side interface + Serve helper
+│       └── events.go             ← shared event type constants
+├── plugins/
+│   ├── .gitkeep
+│   └── file-type-validator/
+│       ├── main.go               ← example plugin entrypoint
+│       ├── validator.go          ← file.uploaded handler
+│       └── file-type-validator.json  ← manifest sidecar (copied next to binary)
+├── docs/
+│   ├── adr/
+│   │   └── NNN-plugin-system.md  ← interface + bus decision (created at /build)
+│   └── plugins/
+│       └── README.md             ← plugin author guide
+├── internal/api/
+│   ├── plugin_handler.go
+│   └── router.go                 ← register plugin routes
+├── internal/volume/
+│   ├── file_service.go           ← inject EventPublisher; emit after upload/delete
+│   └── service.go                ← emit volume.created / volume.deleted / volume.updated
+├── cmd/server/main.go            ← wire plugin service, start registry
 ├── web/src/
-│   ├── pages/
-│   │   └── MonitoringPage.tsx      ← replace PlaceholderPage
-│   ├── components/monitoring/
-│   │   ├── DiskOverviewCard.tsx
-│   │   ├── VolumeStatsCard.tsx
-│   │   ├── MimeBreakdownChart.tsx
-│   │   ├── UnifiedVolumeList.tsx
-│   │   ├── VolumeSearchPanel.tsx
-│   │   └── DiskMaskToggle.tsx
-│   ├── hooks/
-│   │   ├── useMonitoringOverview.ts
-│   │   ├── useVolumeStats.ts
-│   │   └── useVolumeSearch.ts
-│   ├── store/
-│   │   └── useSettings.ts          ← instance settings (mask_disk_names)
-│   └── lib/api.ts                  ← monitoring + search methods
+│   ├── pages/PluginsPage.tsx     ← replace PlaceholderPage
+│   ├── components/plugins/
+│   │   ├── PluginList.tsx
+│   │   ├── PluginStatusBadge.tsx
+│   │   └── PluginActivityFeed.tsx
+│   └── hooks/usePlugins.ts
+├── docker-compose.yml              ← mount plugins volume
+├── .env.example                    ← PLUGINS_PATH
+└── Dockerfile                      ← optional: build example plugin in CI image
 ```
+
+---
+
+## Architecture
+
+### Event flow
+
+```
+FileService.Upload (success)
+    → EventPublisher.Publish(file.uploaded)
+    → EventBus (in-process)
+    → Plugin Runtime (for each enabled plugin subscribed)
+    → go-plugin RPC → plugin subprocess HandleEvent()
+    → plugin may call HostAPI.Log / HostAPI.Emit
+    → PluginLogEntry persisted → UI activity feed
+```
+
+### Module boundaries (AGENTS.md)
+
+- Domain modules (`volume`, future `task`) **only** call `EventPublisher.Publish` — never import go-plugin or talk to plugin subprocesses directly.
+- All plugin lifecycle, RPC, and subscription logic lives in `internal/plugin/`.
+- Plugins access volume data **only** through `HostAPI` — no DB, no direct disk writes outside their volume data dir.
+
+### go-plugin handshake
+
+| Side | Responsibility |
+|---|---|
+| **Host (lcloud)** | Scans `PLUGINS_PATH`, spawns plugin subprocess, implements `HostAPI` GRPC service, dispatches events |
+| **Plugin binary** | Implements `LcloudPlugin` GRPC service, declares subscriptions in manifest, calls `HostAPI` for callbacks |
+
+Communication: HashiCorp go-plugin with **GRPC** plugin protocol (default in go-plugin v1.x).
 
 ---
 
 ## Data models
 
-### Volume stats cache (`./cache/metadata/stats.json`)
+### Plugin manifest (sidecar `{binary-name}.json` next to binary)
 
-Written by `monitoring.Service.ComputeStats`. Invalidated (deleted) on file upload/delete. Portable — travels with the volume.
+Required for discovery. Binary without manifest is skipped with a warning log.
 
 ```json
 {
-  "computed_at": "2026-07-01T14:30:00Z",
-  "file_count": 142,
-  "total_bytes": 12884901888,
-  "by_category": [
-    {
-      "category": "images",
-      "file_count": 140,
-      "bytes": 12800000000,
-      "proportion": 0.993
-    },
-    {
-      "category": "other",
-      "file_count": 2,
-      "bytes": 84901888,
-      "proportion": 0.007
-    }
-  ],
-  "by_mime": [
-    {
-      "mime_type": "image/jpeg",
-      "file_count": 120,
-      "bytes": 11000000000,
-      "proportion": 0.854
-    },
-    {
-      "mime_type": "image/png",
-      "file_count": 20,
-      "bytes": 1800000000,
-      "proportion": 0.140
-    }
-  ]
+  "id": "file-type-validator",
+  "name": "File Type Validator",
+  "version": "1.0.0",
+  "description": "Validates uploaded files against volume extension filters",
+  "author": "lcloud",
+  "subscribe": ["file.uploaded"],
+  "emit": ["validation.failed", "validation.passed"]
 }
 ```
 
 **Rules:**
 
-- `total_bytes` must equal sum of `by_category[].bytes` (within rounding).
-- `proportion` = `bytes / total_bytes`; `0` when `total_bytes` is 0.
-- Empty volume: `file_count: 0`, empty arrays, `total_bytes: 0`.
-- Stats computation scans all `*.json` in `cache/metadata/` except `stats.json` itself.
+- `id` — stable slug, `[a-z0-9-]+`, unique per instance; matches volume data dir name `./plugins/{id}/`.
+- `subscribe` — event names the plugin wants; runtime filters before RPC dispatch.
+- `emit` — declared custom events (documentation; bus accepts any `plugin.*` or namespaced custom events).
 
-### MIME category mapping
-
-| Category | MIME patterns |
-|---|---|
-| `images` | `image/*` |
-| `videos` | `video/*` |
-| `audio` | `audio/*` |
-| `documents` | `application/pdf`, `application/msword`, `application/vnd.*`, `text/*`, `application/rtf` |
-| `archives` | `application/zip`, `application/x-tar`, `application/gzip`, `application/x-7z-compressed`, `application/x-rar-compressed` |
-| `other` | everything else |
-
-Mapping lives in `internal/monitoring/mime_groups.go` — single function `CategoryForMIME(mime string) string`.
-
-### Extended `SearchQuery` (indexer)
+### PostgreSQL — `plugins`
 
 ```go
-type SearchQuery struct {
-    Term           string     // filename/path text search; empty = filter-only
-    MimePrefix     string     // e.g. "image/" — prefix match on mime_type
-    MinSizeBytes   *int64
-    MaxSizeBytes   *int64
-    ModifiedAfter  *time.Time
-    ModifiedBefore *time.Time
-    Limit          int        // default 50, max 200
+type Plugin struct {
+    ID            string    `gorm:"primaryKey"` // manifest id
+    Name          string    `gorm:"not null"`
+    Version       string    `gorm:"not null"`
+    Description   string
+    BinaryPath    string    `gorm:"not null"`
+    ManifestPath  string    `gorm:"not null"`
+    Enabled       bool      `gorm:"not null;default:true"`
+    Status        string    `gorm:"not null;default:stopped"` // running | stopped | error
+    Subscriptions StringArray `gorm:"type:jsonb;not null"` // from manifest
+    LastError     string
+    DiscoveredAt  time.Time
+    UpdatedAt     time.Time
 }
 ```
 
-Bleve implementation builds a conjunction query: optional `MatchQuery` on `name` + optional numeric/date range filters.
+On startup: scan directory → upsert rows → start enabled plugins.
+
+### PostgreSQL — `plugin_log_entries`
+
+```go
+type PluginLogEntry struct {
+    ID        uuid.UUID  `gorm:"type:uuid;primaryKey"`
+    PluginID  string     `gorm:"not null;index"`
+    VolumeID  *uuid.UUID `gorm:"type:uuid;index"`
+    EventType string     // e.g. file.uploaded, validation.passed
+    Level     string     `gorm:"not null"` // info | warn | error
+    Message   string     `gorm:"not null"`
+    Payload   JSON       `gorm:"type:jsonb"` // optional structured detail
+    CreatedAt time.Time  `gorm:"index"`
+}
+```
+
+Retention: **500 entries max per plugin** (decision OQ1) — delete oldest on insert when count exceeds 500.
 
 ---
 
-## API (Phase 1.2)
+## Event catalog
 
-Base path: `/api`. All endpoints require JWT.
+### Core events (emitted by lcloud in Phase 1.3)
 
-**Error shape** (unchanged):
+| Event | Emitted when | Payload highlights |
+|---|---|---|
+| `file.uploaded` | After successful `FileService.Upload` | `volume_id`, `name`, `relative_path`, `mime_type`, `size_bytes`, `filters` |
+| `file.deleted` | After successful `FileService.Delete` | `volume_id`, `relative_path`, `size_bytes` |
+| `volume.created` | After `VolumeService.Create` | `volume_id`, `name`, `owner_id`, `filters`, `quota_bytes` |
+| `volume.deleted` | After `VolumeService.Delete` | `volume_id`, `name` |
+| `volume.updated` | After `VolumeService.Patch` | `volume_id`, changed fields |
 
-```json
-{ "error": "human-readable message", "code": "STATS_NOT_FOUND" }
+### Defined but not emitted until later phases
+
+| Event | Phase |
+|---|---|
+| `file.moved` | When move API / `move_files` macro ships |
+| `file.renamed` | When rename API ships |
+| `task.executed` | Phase 1.4 |
+| `task.failed` | Phase 1.4 |
+| `volume.alert.usage` | Phase 1.4 (`alert_usage` macro) |
+
+### Plugin lifecycle events (emitted by plugin runtime)
+
+| Event | When |
+|---|---|
+| `plugin.registered` | Plugin subprocess started successfully |
+| `plugin.unregistered` | Plugin stopped or crashed |
+
+### Custom events (example plugin)
+
+| Event | When |
+|---|---|
+| `validation.passed` | Extension matches volume filters |
+| `validation.failed` | Extension mismatch (edge case: filter changed after upload, manual file copy) |
+
+Custom events are re-published on the bus so other plugins can subscribe in future.
+
+### Event envelope
+
+```go
+type Event struct {
+    ID        string          `json:"id"`         // uuid
+    Type      string          `json:"type"`
+    Timestamp time.Time       `json:"timestamp"`
+    VolumeID  string          `json:"volume_id,omitempty"`
+    Payload   json.RawMessage `json:"payload"`
+}
 ```
 
-### Monitoring
+---
+
+## Plugin RPC interfaces
+
+### `LcloudPlugin` (implemented by plugin binary)
+
+```go
+type LcloudPlugin interface {
+    // Called by host when a subscribed event occurs.
+    HandleEvent(ctx context.Context, event *Event) (*HandleResult, error)
+}
+
+type HandleResult struct {
+    // Optional custom events to emit onto the bus.
+    Emit []Event `json:"emit,omitempty"`
+}
+```
+
+### `HostAPI` (implemented by lcloud host, called by plugin)
+
+```go
+type HostAPI interface {
+    // Re-emit an event onto the bus (for custom plugin events).
+    Emit(ctx context.Context, event *Event) error
+
+    // Append a log entry visible in the plugin manager UI.
+    Log(ctx context.Context, entry LogRequest) error
+
+    // Read volume config (filters, name, quota) — no file content access.
+    GetVolumeConfig(ctx context.Context, volumeID string) (*VolumeConfigView, error)
+
+    // Resolve path for plugin's isolated data dir; creates dir if missing.
+    PluginDataDir(ctx context.Context, volumeID, pluginID string) (string, error)
+}
+```
+
+**Security rules for HostAPI:**
+
+- `GetVolumeConfig` — owner-scoped volumes only; returns filters/name/quota, not disk paths (masking-friendly).
+- `PluginDataDir` — only `{volume.root}/plugins/{plugin-id}/`; created with `0755`.
+- No raw `userdata/` file read/write in MVP.
+
+---
+
+## Example plugin — `file-type-validator`
+
+**Purpose:** Demonstrate end-to-end plugin flow (UC3.1, UC3.2).
+
+**Behavior on `file.uploaded`:**
+
+1. Read `filters` from event payload (also available via `GetVolumeConfig`).
+2. Run same logic as `volume.ValidateExtension(filters, filename)`.
+3. If valid → `HostAPI.Log(info, "validation passed for {filename}")` + emit `validation.passed`.
+4. If invalid → `HostAPI.Log(warn, "validation failed for {filename}")` + emit `validation.failed`.
+5. Does **not** delete the file (audit-only in MVP; deletion would require a future HostAPI).
+
+**Note for UC3.2 demo:** Upload a `.png` to a volume that allows `.png` — plugin logs success. To demo `validation.failed`, change volume filters after upload or copy a disallowed file directly into `userdata/` (manual test only).
+
+---
+
+## API (Phase 1.3)
+
+Base path: `/api`. All endpoints require JWT unless noted.
+
+### Plugins
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `GET` | `/monitoring/overview` | JWT | Unified multi-disk overview: disks, volumes, usage, cached stats summary |
-| `GET` | `/monitoring/volumes/:id/stats` | JWT | Full stats for one volume (reads cache or computes) |
-| `POST` | `/monitoring/volumes/:id/stats/refresh` | JWT | Force recompute + write `stats.json` |
+| `GET` | `/plugins` | JWT | List discovered plugins with status |
+| `GET` | `/plugins/:id` | JWT | Single plugin detail |
+| `PATCH` | `/plugins/:id` | Admin | Enable/disable plugin |
+| `GET` | `/plugins/logs` | JWT | Recent activity feed |
 
-**Authorization:** same as volumes — owner or admin.
-
-#### `GET /monitoring/overview`
+#### `GET /plugins`
 
 **Response:**
 
 ```json
 {
-  "disks": [
+  "plugins": [
     {
-      "path": "/data/disks/ssd",
-      "name": "ssd",
-      "label": "SSD",
-      "total_bytes": 1000000000000,
-      "free_bytes": 800000000000,
-      "used_by_volumes_bytes": 12884901888,
-      "volume_count": 1
-    },
-    {
-      "path": "/data/disks/hdd1",
-      "name": "hdd1",
-      "label": "HDD 1",
-      "total_bytes": 4000000000000,
-      "free_bytes": 3200000000000,
-      "used_by_volumes_bytes": 5368709120,
-      "volume_count": 1
-    }
-  ],
-  "volumes": [
-    {
-      "id": "550e8400-e29b-41d4-a716-446655440000",
-      "name": "Photos",
-      "disk_path": "/data/disks/ssd",
-      "quota_bytes": 53687091200,
-      "used_bytes": 12884901888,
-      "file_count": 142,
-      "top_category": "images",
-      "stats_computed_at": "2026-07-01T14:30:00Z"
-    },
-    {
-      "id": "660e8400-e29b-41d4-a716-446655440001",
-      "name": "Documents",
-      "disk_path": "/data/disks/hdd1",
-      "quota_bytes": 107374182400,
-      "used_bytes": 5368709120,
-      "file_count": 48,
-      "top_category": "documents",
-      "stats_computed_at": "2026-07-01T12:00:00Z"
+      "id": "file-type-validator",
+      "name": "File Type Validator",
+      "version": "1.0.0",
+      "description": "Validates uploaded files against volume extension filters",
+      "enabled": true,
+      "status": "running",
+      "subscriptions": ["file.uploaded"],
+      "last_error": "",
+      "discovered_at": "2026-07-01T10:00:00Z"
     }
   ]
 }
 ```
 
-**Computation:**
+#### `PATCH /plugins/:id`
 
-- `used_by_volumes_bytes` = sum of `used_bytes` for volumes on that disk (from PostgreSQL).
-- `volume_count` = count of volumes on that disk.
-- Volume summary fields (`file_count`, `top_category`, `stats_computed_at`) come from cached `stats.json` if present; otherwise computed lazily on this request.
-
-#### `GET /monitoring/volumes/:id/stats`
-
-**Response:**
+**Request:**
 
 ```json
-{
-  "volume_id": "550e8400-e29b-41d4-a716-446655440000",
-  "name": "Photos",
-  "quota_bytes": 53687091200,
-  "used_bytes": 12884901888,
-  "free_bytes": 40802189312,
-  "usage_percent": 0.24,
-  "file_count": 142,
-  "computed_at": "2026-07-01T14:30:00Z",
-  "by_category": [ "..." ],
-  "by_mime": [ "..." ]
-}
+{ "enabled": false }
 ```
 
-- `free_bytes` = `quota_bytes - used_bytes` when quota > 0; `null` when quota is 0 (unlimited).
-- `usage_percent` = `used_bytes / quota_bytes` when quota > 0; `null` when unlimited.
+**Behavior:**
 
-#### `POST /monitoring/volumes/:id/stats/refresh`
+- `enabled: true` → start subprocess if not running; set status `running` or `error`.
+- `enabled: false` → graceful stop subprocess; set status `stopped`.
 
-Recomputes stats from metadata cache, writes `stats.json`, returns same body as GET stats.
-
-**Future (Phase 1.4):** the `compute_stats` macro calls the same `monitoring.Service.ComputeStats(ctx, volumeID)` function — no duplicate logic.
-
-### Search
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `GET` | `/volumes/:id/search` | JWT | Bleve search within volume |
+#### `GET /plugins/logs`
 
 **Query parameters:**
 
 | Param | Type | Description |
 |---|---|---|
-| `q` | string | Filename/path search term (optional) |
-| `mime_prefix` | string | MIME prefix filter, e.g. `image/` |
-| `min_size` | int64 | Minimum file size in bytes |
-| `max_size` | int64 | Maximum file size in bytes |
-| `modified_after` | RFC3339 | Modified on or after |
-| `modified_before` | RFC3339 | Modified on or before |
-| `limit` | int | Max results (default 50, max 200) |
+| `plugin_id` | string | Filter by plugin (optional) |
+| `volume_id` | uuid | Filter by volume (optional) |
+| `limit` | int | Max entries (default 50, max 200) |
 
 **Response:**
 
 ```json
 {
-  "query": {
-    "q": "vacation",
-    "mime_prefix": "image/",
-    "limit": 50
-  },
-  "total": 3,
-  "results": [
+  "entries": [
     {
-      "name": "vacation.jpg",
-      "relative_path": "2024/vacation.jpg",
-      "mime_type": "image/jpeg",
-      "size_bytes": 2048576,
-      "modified_at": "2026-06-15T10:00:00Z",
-      "has_thumbnail": true
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "plugin_id": "file-type-validator",
+      "volume_id": "660e8400-e29b-41d4-a716-446655440001",
+      "event_type": "validation.passed",
+      "level": "info",
+      "message": "validation passed for photo.png",
+      "created_at": "2026-07-01T14:30:00Z"
     }
   ]
 }
 ```
 
-**Validation errors (422):**
+**Authorization:**
+
+- Regular users see log entries for volumes they own.
+- Admin sees all entries.
+
+**Error codes:**
 
 | Code | Condition |
 |---|---|
-| `VOLUME_NOT_FOUND` | Unknown volume ID |
-| `FORBIDDEN` | Volume not owned by caller (non-admin) |
-| `INVALID_SEARCH_QUERY` | Malformed date or negative size |
-| `INDEX_UNAVAILABLE` | Bleve index cannot be opened |
+| `PLUGIN_NOT_FOUND` | Unknown plugin id |
+| `PLUGIN_START_FAILED` | Enable true but subprocess failed to start |
+| `FORBIDDEN` | Non-admin PATCH |
 
 ---
 
-## Stats lifecycle
+## Infrastructure changes
 
-```
-Upload/Delete file
-    → invalidate stats.json (delete file)
-    → used_bytes updated (existing Phase 1.1 flow)
+### Environment
 
-GET /monitoring/volumes/:id/stats
-    → if stats.json exists → return cached
-    → else → ComputeStats() → write stats.json → return
+Add to `.env.example`:
 
-POST .../stats/refresh
-    → ComputeStats() → write stats.json → return
-
-Phase 1.4 compute_stats macro
-    → calls ComputeStats() (same function)
+```bash
+# Plugin binaries directory (inside container)
+PLUGINS_PATH=/plugins
 ```
 
-**ComputeStats algorithm:**
+Default in `config.Load()`: `./plugins` for local dev, `/plugins` when `PLUGINS_PATH` set.
 
-1. List all `FileMetadataRecord` from `MetadataCache.ListAll(rootPath)`.
-2. Aggregate by MIME type and by category.
-3. Write `stats.json` atomically (temp + rename).
-4. Return structured stats.
+### Docker Compose
+
+```yaml
+app:
+  environment:
+    PLUGINS_PATH: /plugins
+  volumes:
+    - ${PLUGINS_PATH:-./plugins}:/plugins:ro
+```
+
+Mount read-only: lcloud executes but does not modify plugin binaries.
+
+### Startup sequence (`cmd/server/main.go`)
+
+1. Migrate `Plugin`, `PluginLogEntry` models.
+2. Construct `plugin.Service` with config, volume service, event bus.
+3. `registry.ScanAndLoad()` — discover binaries + manifests.
+4. `runtime.StartEnabled()` — spawn go-plugin clients.
+5. Inject `EventPublisher` into `VolumeService` and `FileService`.
+6. On shutdown (SIGTERM): `runtime.StopAll()`.
 
 ---
 
-## Frontend (Phase 1.2)
+## Frontend (Phase 1.3)
 
-Follow [design/DESIGN.md](./design/DESIGN.md): dark canvas, yellow stat numbers, card surfaces, progress bars for usage.
+Follow [design/DESIGN.md](./design/DESIGN.md): dark cards, status badges (green `running`, muted `stopped`, red `error`), yellow accents sparingly.
 
 ### Routes
 
 | Path | Access | Content |
 |---|---|---|
-| `/monitoring` | Protected | Monitoring dashboard (replaces placeholder) |
+| `/plugins` | Protected | Plugin manager (replaces placeholder) |
 
-Remove "Soon" badge from Monitoring sidebar item when Phase 1.2 ships.
+Remove "Soon" badge from Plugins sidebar item when Phase 1.3 ships.
 
-### `/monitoring` — Dashboard layout
+### `/plugins` — Layout
 
-**Header row:**
+**Section 1 — Plugin list (`PluginList`):**
 
-- Page title: **Monitoring**
-- **Settings page** — admin toggle "Hide disk names"; persisted via `PATCH /api/admin/settings`
+- Table/cards: name, version, status badge, subscribed events, enabled toggle (admin only).
+- Empty state: "No plugins found — drop a binary + manifest into the plugins directory and restart."
 
-**Section 1 — Disk overview (top cards):**
+**Section 2 — Activity feed (`PluginActivityFeed`):**
 
-- One card per physical disk from overview API.
-- **Mask off:** show label (e.g. "SSD"), total/free bytes, bar of `used_by_volumes_bytes / total_bytes`, volume count.
-- **Mask on:** show generic title "Storage" + index ("Storage 1", "Storage 2"), hide path/name/label; show only free/total bytes and volume count.
-
-**Section 2 — Unified volume list:**
-
-- All volumes across disks in a table or card grid.
-- Columns: name, usage bar (used/quota), file count, top category, disk (hidden when mask on).
-- Click volume row → expands or navigates to stats detail panel.
-
-**Section 3 — Volume detail panel (inline or drawer):**
-
-- Selected volume: large yellow stat numbers for used/quota/percent.
-- MIME category breakdown — horizontal bars or donut chart (`MimeBreakdownChart`).
-- Top MIME types list (top 5 by bytes).
-- **Refresh stats** button → POST refresh endpoint.
-
-**Section 4 — Search (`VolumeSearchPanel`):**
-
-- Volume selector dropdown (user's volumes).
-- Text input for filename search.
-- Optional filter chips: type (images/documents/…), size range, date range.
-- Results table: name, path, size, modified, thumbnail if image.
-- Empty state when no matches.
-
-### Disk masking behavior (server-enforced)
-
-| Element | Mask off | Mask on (non-admin) |
-|---|---|---|
-| Disk card title | Label ("SSD") | "Storage 1" (ordered by API response index) |
-| Disk path / name | Shown where relevant | Hidden (API returns empty path, generic label) |
-| Volume list disk column | Label | Hidden |
-| `VolumeCard` on `/volumes` | Disk path shown | Disk path hidden |
-| Admin user | Real paths in volume creation only | Masked everywhere else |
-
-Configured in **Settings** (`PATCH /api/admin/settings`). Toggle removed from Monitoring page header.
-
-### Settings page (minimal Phase 1.2 scope)
-
-- `/settings` replaces Phase 0 placeholder for this security option only.
-- Admin: toggle "Hide disk names" with security explanation.
-- Non-admin: read-only status ("Disk names are hidden/visible").
+- Recent log entries from `GET /plugins/logs`.
+- Columns: time, plugin name, volume name (linked), level, message.
+- Auto-refresh every 10s via TanStack Query `refetchInterval`.
 
 ### Data fetching
 
-- `useMonitoringOverview()` — TanStack Query, key `['monitoring', 'overview']`, staleTime 30s.
-- `useVolumeStats(volumeId)` — enabled when volume selected.
-- `useVolumeSearch(volumeId, params)` — debounced 300ms on `q` input.
-- Invalidate overview query after stats refresh.
+- `usePlugins()` — key `['plugins']`, staleTime 15s.
+- `usePluginLogs(params)` — key `['plugins', 'logs', params]`, refetchInterval 10s.
+- `useTogglePlugin(id)` — mutation PATCH, invalidate plugins query.
 
 ---
 
 ## Code Style
 
-### Go — monitoring service pattern
-
-Handlers stay thin; stats logic in `internal/monitoring/`.
+### Go — EventPublisher injection (volume stays ignorant of plugins)
 
 ```go
-// internal/monitoring/service.go
-func (s *Service) GetVolumeStats(ctx context.Context, vol *volume.Volume) (*VolumeStats, error) {
-    if cached, err := s.statsCache.Read(vol.RootPath); err == nil {
-        return cached, nil
-    }
-    return s.ComputeStats(ctx, vol)
+// internal/plugin/publisher.go
+type EventPublisher interface {
+    Publish(ctx context.Context, event Event)
 }
 
-func (s *Service) ComputeStats(ctx context.Context, vol *volume.Volume) (*VolumeStats, error) {
-    records, err := s.metadata.ListAll(vol.RootPath)
-    if err != nil {
-        return nil, err
-    }
-    stats := aggregateRecords(records)
-    if err := s.statsCache.Write(vol.RootPath, stats); err != nil {
-        return nil, err
-    }
-    return stats, nil
+// internal/volume/file_service.go — after successful upload
+if s.events != nil {
+    s.events.Publish(ctx, plugin.NewFileUploadedEvent(vol, record))
 }
 ```
 
-- Bleve accessed only through `VolumeIndexer` interface — extend `SearchQuery`, implement filters in `bleve.go`.
-- Stats cache writes: temp file + rename (same pattern as `.volume.json`).
-- `ComputeStats` is exported/public on the service — Phase 1.4 task module imports it.
+- `Publish` is fire-and-forget (async goroutine per event batch) — upload API latency must not wait on plugin RPC.
+- Plugin RPC failures log to `Plugin.LastError` + `plugin_log_entries`; never fail the originating user operation.
+
+### Go — Plugin runtime
+
+```go
+func (r *Runtime) Dispatch(ctx context.Context, event Event) {
+    for _, p := range r.runningPlugins() {
+        if !p.SubscribesTo(event.Type) {
+            continue
+        }
+        go func(plugin *RunningPlugin) {
+            if _, err := plugin.Client.HandleEvent(ctx, &event); err != nil {
+                r.markError(plugin.ID, err)
+            }
+        }(p)
+    }
+}
+```
 
 ### TypeScript
 
-- Presentational components in `components/monitoring/`.
-- Human-readable bytes via shared formatter (reuse from volumes UI).
-- Percentages: one decimal place; yellow color for stat-display numbers per design system.
+- Status badge maps: `running` → emerald, `stopped` → muted, `error` → rose (design tokens).
+- Admin-only toggle: hide disable control for non-admin users (read-only list).
 
 ---
 
@@ -545,22 +597,24 @@ See [docs/project.md — Coverage targets](./docs/project.md#coverage-targets).
 
 | Layer | Focus | Location |
 |---|---|---|
-| Backend unit | MIME category mapping, stats aggregation math, stats.json read/write | `internal/monitoring/*_test.go` |
-| Backend unit | Bleve Search with term + mime_prefix + size + date filters | `internal/indexer/bleve_test.go` |
-| Backend unit | MetadataCache.ListAll | `internal/volume/metadata_cache_test.go` |
-| Backend integration | Overview endpoint with temp disk + volumes | `internal/api/monitoring_handler_test.go` |
-| Backend integration | Search endpoint | `internal/api/search_handler_test.go` |
-| Frontend unit | DiskMaskToggle, MimeBreakdownChart render, search debounce | `web/src/components/monitoring/*.test.tsx` |
+| Backend unit | Event bus subscribe/dispatch, manifest parsing | `internal/plugin/eventbus_test.go`, `registry_test.go` |
+| Backend unit | EventPublisher async behavior | `internal/plugin/service_test.go` |
+| Backend integration | Mock plugin binary (test helper) handles event | `internal/plugin/runtime_test.go` |
+| Backend integration | Plugin API handlers enable/disable | `internal/api/plugin_handler_test.go` |
+| Backend integration | File upload emits event (mock publisher) | `internal/volume/file_service_test.go` |
+| Example plugin | Validator logic | `plugins/file-type-validator/validator_test.go` |
+| Frontend unit | PluginList, PluginStatusBadge, activity feed | `web/src/components/plugins/*.test.tsx` |
 
-**Coverage target:** 80% minimum on `internal/monitoring/` and search extensions in `internal/indexer/`.
+**Coverage target:** 80% minimum on `internal/plugin/`.
 
 **Verify before ship:**
 
 ```bash
-go test ./internal/monitoring/... ./internal/indexer/... -cover
+go build -o plugins/file-type-validator ./plugins/file-type-validator
+go test ./internal/plugin/... -cover
 go test ./...
 cd web && npm run test
-# Manual UC2.1 – UC2.4 via UI + curl script above
+# Manual UC3.1 – UC3.2 via UI + curl script above
 ```
 
 ---
@@ -569,51 +623,55 @@ cd web && npm run test
 
 ### Always
 
-- Route all search through `VolumeIndexer` interface — never import Bleve outside `internal/indexer/`.
-- Stats computation reads from `./cache/metadata/` — never walk `userdata/` for breakdown (metadata cache is the scan target).
-- Invalidate `stats.json` on file upload and delete (hook in existing `FileService`).
-- Scope monitoring data to volume owner; admin bypass explicit in service layer.
-- Follow [design/DESIGN.md](./design/DESIGN.md) for monitoring UI.
-- Export `ComputeStats` as the single stats entry point for Phase 1.4 reuse.
+- Domain modules publish events via `EventPublisher` only — never import `internal/plugin/runtime` or go-plugin from `volume/`.
+- Plugin subprocess crash must not crash lcloud core.
+- User-facing operations (upload, delete, volume CRUD) succeed even if all plugins are down.
+- Plugin API surface is minimal and explicit — expand via ADR, not ad-hoc.
+- Write ADR in `docs/adr/` before merge documenting interface + bus design.
+- Follow [design/DESIGN.md](./design/DESIGN.md) for plugin manager UI.
+- Mount `plugins/` read-only in Docker.
 
 ### Ask first
 
-- Adding chart libraries not already in the frontend stack.
-- Per-user display preferences beyond instance-wide admin settings.
-- Cross-volume search (architectural scope change).
-- Changing `stats.json` location or schema after Phase 1.2 ships (requires ADR).
+- Adding plugin HostAPI methods beyond Log / Emit / GetVolumeConfig / PluginDataDir.
+- Hot-reload without restart.
+- Plugin ability to mutate userdata files.
+- New core event types beyond the catalog above.
+- Signing / verification of plugin binaries.
 
 ### Never
 
-- Walk `userdata/` recursively for stats when metadata cache exists.
-- Import Bleve outside `internal/indexer/`.
-- Duplicate stats computation logic for Phase 1.4 macro — one function only.
-- Expose disk paths in masked UI mode (client must strip even if API returns them).
-- Block Phase 1.2 on Phase 1.4 task scheduler.
+- Direct DB access from plugin subprocess.
+- Direct disk writes outside `{volume}/plugins/{plugin-id}/` from plugins.
+- Call plugin RPC from Gin handlers — handlers call `plugin.Service` for management only.
+- Block file upload on plugin validation failure (core filter handles rejection; plugin is audit).
+- Change `.volume.json` schema for plugin state — plugin instance state lives in PostgreSQL + volume plugin dir.
 
 ---
 
 ## Success Criteria
 
-Phase 1.2 is **done** when all of the following pass:
+Phase 1.3 is **done** when all of the following pass:
 
-- [ ] **SC2.1** `GET /api/monitoring/overview` returns all disks with total/free/used_by_volumes and all user volumes with summary stats
-- [ ] **SC2.2** Admin overview includes all users' volumes; regular user sees only own volumes
-- [ ] **SC2.3** `GET /api/monitoring/volumes/:id/stats` returns usage, file count, category breakdown, MIME breakdown
-- [ ] **SC2.4** Stats match actual files after upload (categories sum to total; proportions correct)
-- [ ] **SC2.5** `stats.json` written to `./cache/metadata/` after compute; deleted on file upload/delete
-- [ ] **SC2.6** `POST .../stats/refresh` forces recompute and updates cache
-- [ ] **SC2.7** Second disk with second volume — both appear in overview unified list
-- [ ] **SC2.8** `GET /api/volumes/:id/search?q=vacation` returns matching filenames
-- [ ] **SC2.9** Search filters work: `mime_prefix`, `min_size`, `max_size`, `modified_after`, `modified_before`
-- [ ] **SC2.10** Empty search term with filters only returns filter-matched files
-- [ ] **SC2.11** UI: monitoring dashboard shows real data from live volume (UC2.1)
-- [ ] **SC2.12** UI: multi-disk unified volume list (UC2.2)
-- [ ] **SC2.13** Admin can enable disk name masking in Settings; non-admins see masked disk identifiers app-wide (UC2.3)
-- [ ] **SC2.14** UI: volume search finds "vacation" matches (UC2.4)
-- [ ] **SC2.15** Monitoring sidebar item active without "Soon" badge
-- [ ] **SC2.16** `ComputeStats` callable from monitoring service (documented for Phase 1.4 integration)
-- [ ] **SC2.17** `go test ./...` and `cd web && npm run test` pass
+- [ ] **SC3.1** `PLUGINS_PATH` configurable; defaults documented in `.env.example`
+- [ ] **SC3.2** Docker mounts plugins directory; example plugin binary discoverable after restart
+- [ ] **SC3.3** Registry scans binaries + manifest sidecars; invalid entries logged, skipped
+- [ ] **SC3.4** `GET /api/plugins` lists discovered plugins with `running` / `stopped` / `error` status
+- [ ] **SC3.5** Admin `PATCH /api/plugins/:id` enable/disable starts/stops subprocess
+- [ ] **SC3.6** Successful file upload emits `file.uploaded` on the bus (verified via mock + integration test)
+- [ ] **SC3.7** File delete emits `file.deleted`; volume create/delete/patch emit corresponding events
+- [ ] **SC3.8** Enabled plugin subprocess receives subscribed events via go-plugin RPC
+- [ ] **SC3.9** `file-type-validator` logs validation result to `plugin_log_entries`
+- [ ] **SC3.10** `GET /api/plugins/logs` returns entries; scoped to volume owner; admin sees all
+- [ ] **SC3.11** Custom event `validation.passed` / `validation.failed` re-published on bus
+- [ ] **SC3.12** `{volume}/plugins/file-type-validator/` created on first handled event
+- [ ] **SC3.13** Plugin crash marks status `error`, sets `last_error`; core remains healthy
+- [ ] **SC3.14** UI: plugin manager shows plugin list with status (UC3.1)
+- [ ] **SC3.15** UI: activity feed shows notice after upload (UC3.2)
+- [ ] **SC3.16** UI: Plugins sidebar active without "Soon" badge
+- [ ] **SC3.17** `pkg/pluginsdk/` + `docs/plugins/README.md` exist with minimal working example
+- [ ] **SC3.18** ADR documents plugin interface and event bus
+- [ ] **SC3.19** `go test ./...` and `cd web && npm run test` pass
 
 ---
 
@@ -621,18 +679,20 @@ Phase 1.2 is **done** when all of the following pass:
 
 Suggested vertical slices — `/plan` will expand into `tasks/plan.md`:
 
-1. **MetadataCache.ListAll** — scan all per-file JSON records
-2. **MIME groups + stats aggregation** — `mime_groups.go`, aggregate logic, tests
-3. **Stats cache** — `stats.json` read/write/invalidate
-4. **Monitoring service** — `ComputeStats`, `GetOverview`, `GetVolumeStats`
-5. **Stats invalidation hook** — wire into `FileService` upload/delete
-6. **Extend SearchQuery + Bleve filters** — indexer changes + tests
-7. **Monitoring API handlers** — overview, stats, refresh
-8. **Search API handler** — volume search endpoint
-9. **Settings page + API** — `internal/settings/`, admin toggle for disk masking
-10. **Frontend monitoring page** — disk cards, unified list, stats panel
-11. **Frontend search panel** — volume selector, filters, results
-12. **Integration** — Docker end-to-end UC2.1–UC2.4
+1. **ADR draft** — plugin interface, event bus, go-plugin GRPC choice
+2. **Event types + EventBus** — in-process pub/sub, tests
+3. **EventPublisher interface** — inject into volume/file services; emit core events
+4. **PostgreSQL models** — Plugin, PluginLogEntry; migrate in main
+5. **Plugin manifest parser + registry** — scan PLUGINS_PATH
+6. **HostAPI implementation** — Log, Emit, GetVolumeConfig, PluginDataDir
+7. **go-plugin runtime** — spawn, dispatch, stop, error handling
+8. **Plugin service orchestration** — startup/shutdown wiring in main.go
+9. **Plugin API handlers** — list, patch, logs
+10. **pluginsdk package** — Serve helper + shared types
+11. **file-type-validator example** — build target + manifest
+12. **Frontend PluginsPage** — list, toggle, activity feed
+13. **Docker + config** — PLUGINS_PATH, volume mount
+14. **Integration** — Docker end-to-end UC3.1–UC3.2
 
 ---
 
@@ -640,13 +700,17 @@ Suggested vertical slices — `/plan` will expand into `tasks/plan.md`:
 
 | # | Decision | Status |
 |---|---|---|
-| D1 | Stats cached in `cache/metadata/stats.json` per volume | ✅ Proposed |
-| D2 | MIME categories align with `sort_by_type` macro folders | ✅ Proposed |
-| D3 | Disk masking = admin setting in Settings, server-side enforcement for all display APIs | ✅ Shipped |
-| D4 | Search UI on monitoring page with volume selector | ✅ Proposed |
-| D5 | `ComputeStats` shared with Phase 1.4 `compute_stats` macro | ✅ Proposed |
-| D6 | Lazy stats compute on read if cache missing | ✅ Proposed |
-| D7 | Search endpoint at `/volumes/:id/search` (not under `/monitoring`) | ✅ Proposed — keeps search co-located with volume resource |
+| D1 | go-plugin with GRPC handshake | ✅ Proposed |
+| D2 | Manifest sidecar JSON next to binary | ✅ Proposed |
+| D3 | Plugin logs in PostgreSQL for UI feed | ✅ Proposed |
+| D4 | Async event dispatch — user ops never wait on plugins | ✅ Proposed |
+| D5 | Core upload filter unchanged; plugin is post-upload audit | ✅ Proposed |
+| D6 | Lazy creation of `{volume}/plugins/{id}/` on first event | ✅ Proposed |
+| D7 | Restart required for new binaries (no hot-reload) | ✅ Proposed — matches UC3.1 |
+| D8 | `file.moved` / `task.executed` defined, emission deferred | ✅ Proposed |
+| D9 | Log retention: 500 entries max per plugin, purge on insert | ✅ Resolved (OQ1) |
+| D10 | Example plugin not bundled in Docker image | ✅ Resolved (OQ2) |
+| D11 | UC3.2 demo: success-only in UI; failed case documented manually | ✅ Resolved (OQ3) |
 
 ---
 
@@ -654,42 +718,21 @@ Suggested vertical slices — `/plan` will expand into `tasks/plan.md`:
 
 | # | Question | Status |
 |---|---|---|
-| OQ1 | **Chart library for MIME breakdown** — see below | ⏳ Pending |
-| OQ2 | **Mask toggle scope** — app-wide via API (resolved) | ✅ Resolved |
-| OQ3 | **Search result actions** — see below | ⏳ Pending |
+| OQ1 | **Plugin log retention** | ✅ Resolved — Option A: 500 entries per plugin, purge on insert |
+| OQ2 | **Build example plugin in Docker image** | ✅ Resolved — Option A: not bundled; user builds/copies manually |
+| OQ3 | **validation.failed demo path** | ✅ Resolved — Option A: success-only in UI; edge case in docs |
 
-### OQ1 — Chart library (plain language)
+### OQ1 — Plugin log retention (plain language)
 
-The monitoring dashboard needs a visual breakdown of file types (e.g. "80% images, 20% documents"). Two options:
+**Decision:** Option A — last **500 entries per plugin**. Old entries deleted on insert when limit exceeded. Query always uses `limit`.
 
-| Option | What it means | Trade-off |
-|---|---|---|
-| **A — CSS progress bars** | Horizontal bars built with Tailwind, no new dependency | Simpler; less polished for many categories |
-| **B — Recharts (or similar)** | Donut/bar chart library | Richer visuals; one new frontend dependency to approve |
+### OQ2 — Example plugin in Docker image (plain language)
 
-**Recommendation:** Option A for Phase 1.2 — horizontal category bars match the design system and avoid a new dependency. Upgrade to charts later if needed.
+**Decision:** Option A — **not bundled**. `plugins/` stays git-ignored and user-managed. Build command documented in `docs/plugins/README.md`.
 
-### OQ2 — Disk mask scope (plain language)
+### OQ3 — validation.failed demo (plain language)
 
-When the user hides disk names, should that apply only on the monitoring page, or everywhere (including the volume list at `/volumes`)?
-
-| Option | Meaning |
-|---|---|
-| **A — Monitoring page only** | Simpler; `/volumes` still shows disk labels for context when creating/managing |
-| **B — Global preference** | Consistent everywhere; slightly more UI work |
-
-**Recommendation:** Option A — masking is a monitoring-dashboard privacy feature, not a global UI mode.
-
-### OQ3 — Search result actions (plain language)
-
-When search returns a file, what can the user do from the result?
-
-| Option | Meaning |
-|---|---|
-| **A — View only** | Show name, size, date, thumbnail; click navigates to `/volumes/:id` at file path |
-| **B — Inline download** | Download button directly in search results |
-
-**Recommendation:** Option A — click row opens the volume file browser at the file's directory. Keeps search panel simple.
+**Decision:** Option A — **success-only in UI**. UC3.2 shows "validation passed" after allowed upload. Manual edge-case test (filter change / direct file copy) documented in `docs/plugins/README.md`.
 
 ---
 

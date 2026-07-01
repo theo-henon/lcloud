@@ -1,5 +1,29 @@
 export type UserRole = "admin" | "user";
 
+export type PluginStatus = "running" | "stopped" | "error";
+
+export interface PluginRecord {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  enabled: boolean;
+  status: PluginStatus;
+  subscriptions: string[];
+  last_error: string;
+  discovered_at: string;
+}
+
+export interface PluginLogEntry {
+  id: string;
+  plugin_id: string;
+  volume_id?: string;
+  event_type: string;
+  level: string;
+  message: string;
+  created_at: string;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -388,6 +412,25 @@ export const api = {
   },
   patchAdminSettings(input: { mask_disk_names: boolean }) {
     return apiRequest<InstanceSettings>("/api/admin/settings", {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    });
+  },
+  getPlugins() {
+    return apiRequest<{ plugins: PluginRecord[] }>("/api/plugins");
+  },
+  getPluginLogs(params: { plugin_id?: string; volume_id?: string; limit?: number } = {}) {
+    const search = new URLSearchParams();
+    if (params.plugin_id) search.set("plugin_id", params.plugin_id);
+    if (params.volume_id) search.set("volume_id", params.volume_id);
+    if (params.limit != null) search.set("limit", String(params.limit));
+    const query = search.toString();
+    return apiRequest<{ entries: PluginLogEntry[] }>(
+      `/api/plugins/logs${query ? `?${query}` : ""}`,
+    );
+  },
+  patchPlugin(id: string, input: { enabled: boolean }) {
+    return apiRequest<PluginRecord>(`/api/plugins/${id}`, {
       method: "PATCH",
       body: JSON.stringify(input),
     });
