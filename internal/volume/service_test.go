@@ -31,7 +31,7 @@ func setupVolumeTest(t *testing.T) (*Service, *FileService, *auth.Claims, string
 
 	indexManager := indexer.NewIndexManager()
 	service := NewService(db, NewDiskRegistry(cfg), indexManager)
-	files := NewFileService(service, indexManager)
+	files := NewFileService(service, indexManager, cfg.MaxUploadBytes)
 	claims := &auth.Claims{UserID: uuid.New(), Role: auth.RoleUser}
 
 	return service, files, claims, storageRoot
@@ -86,4 +86,67 @@ func TestVolumeDeleteRules(t *testing.T) {
 
 	require.ErrorIs(t, service.Delete(claims, vol.ID, false), ErrVolumeNotEmpty)
 	require.NoError(t, service.Delete(adminClaims, vol.ID, true))
+}
+
+func TestUploadReplacesWithoutInflatingUsage(t *testing.T) {
+	service, files, claims, _ := setupVolumeTest(t)
+
+	vol, err := service.Create(claims, CreateVolumeInput{
+		Name:       "Docs",
+		DiskPath:   service.disks.ResolvedPaths()[0],
+		QuotaBytes: 1024,
+	})
+	require.NoError(t, err)
+
+	first := []byte("12345")
+	second := []byte("12")
+
+	_, err = files.Upload(claims, vol.ID, ".", "note.txt", bytes.NewReader(first), int64(len(first)))
+	require.NoError(t, err)
+
+	updated, err := service.Get(claims, vol.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(len(first)), updated.UsedBytes)
+
+	_, err = files.Upload(claims, vol.ID, ".", "note.txt", bytes.NewReader(second), int64(len(second)))
+	require.NoError(t, err)
+
+	updated, err = service.Get(claims, vol.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(len(second)), updated.UsedBytes)
+}
+
+func TestUploadQuotaUsesWrittenBytes(t *testing.T) {
+	service, files, claims, _ := setupVolumeTest(t)
+
+	vol, err := service.Create(claims, CreateVolumeInput{
+		Name:       "Small",
+		DiskPath:   service.disks.ResolvedPaths()[0],
+		QuotaBytes: 10,
+	})
+	require.NoError(t, err)
+
+	payload := []byte("12345678901")
+	_, err = files.Upload(claims, vol.ID, ".", "a.bin", bytes.NewReader(payload), 0)
+	require.ErrorIs(t, err, ErrQuotaExceeded)
+
+	listing, err := files.List(claims, vol.ID, ".")
+	require.NoError(t, err)
+	require.Empty(t, listing.Entries)
+}
+
+func TestUploadRejectsMaxSize(t *testing.T) {
+	service, files, claims, _ := setupVolumeTest(t)
+
+	vol, err := service.Create(claims, CreateVolumeInput{
+		Name:     "Limited",
+		DiskPath: service.disks.ResolvedPaths()[0],
+	})
+	require.NoError(t, err)
+
+	files.maxUploadBytes = 8
+	payload := []byte("123456789")
+
+	_, err = files.Upload(claims, vol.ID, ".", "big.bin", bytes.NewReader(payload), int64(len(payload)))
+	require.ErrorIs(t, err, ErrUploadTooLarge)
 }

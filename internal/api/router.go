@@ -167,9 +167,8 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 
 	router := gin.New()
 	router.Use(gin.Recovery(), gin.Logger())
-	if cfg.MaxUploadBytes > 0 {
-		router.MaxMultipartMemory = cfg.MaxUploadBytes
-	}
+	// Buffer multipart parsing in memory; actual upload size is enforced in FileService.
+	router.MaxMultipartMemory = 32 << 20
 
 	authHandler := NewAuthHandler(cfg.AuthService)
 	adminHandler := NewAdminHandler(cfg.AuthService)

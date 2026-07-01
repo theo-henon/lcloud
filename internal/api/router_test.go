@@ -38,7 +38,7 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *auth.Service) {
 	diskRegistry := volume.NewDiskRegistry(cfg)
 	indexManager := indexer.NewIndexManager()
 	volumeService := volume.NewService(db, diskRegistry, indexManager)
-	fileService := volume.NewFileService(volumeService, indexManager)
+	fileService := volume.NewFileService(volumeService, indexManager, cfg.MaxUploadBytes)
 
 	router := NewRouter(RouterConfig{
 		AuthService:    service,

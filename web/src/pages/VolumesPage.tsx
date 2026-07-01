@@ -89,11 +89,13 @@ export function VolumesPage() {
                   });
                 }}
                 onDelete={(item, force) => {
+                  if (!force && item.used_bytes > 0) {
+                    setError("This volume still contains files and cannot be deleted.");
+                    return;
+                  }
                   const message = force
                     ? "Force delete will permanently remove all files in this volume. Continue?"
-                    : item.used_bytes > 0
-                      ? "This volume still contains files and cannot be deleted."
-                      : "Delete this empty volume?";
+                    : "Delete this empty volume?";
                   if (!window.confirm(message)) {
                     return;
                   }

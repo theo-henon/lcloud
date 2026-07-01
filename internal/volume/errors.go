@@ -11,6 +11,8 @@ var (
 	ErrInvalidFilter      = errors.New("invalid filter configuration")
 	ErrFileFilterRejected = errors.New("file extension not allowed")
 	ErrQuotaExceeded      = errors.New("quota exceeded")
+	ErrUploadTooLarge     = errors.New("upload exceeds max size")
+	ErrUploadSizeMismatch = errors.New("upload size mismatch")
 	ErrPathTraversal      = errors.New("path traversal detected")
 	ErrFileNotFound       = errors.New("file not found")
 	ErrDirectoryExists    = errors.New("directory already exists")

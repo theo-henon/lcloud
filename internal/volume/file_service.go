@@ -32,20 +32,22 @@ type DirectoryListing struct {
 }
 
 type FileService struct {
-	volumes      *Service
-	paths        *PathResolver
-	metadata     *MetadataCache
-	thumbnails   *ThumbnailGenerator
-	indexManager *indexer.IndexManager
+	volumes        *Service
+	paths          *PathResolver
+	metadata       *MetadataCache
+	thumbnails     *ThumbnailGenerator
+	indexManager   *indexer.IndexManager
+	maxUploadBytes int64
 }
 
-func NewFileService(volumes *Service, indexManager *indexer.IndexManager) *FileService {
+func NewFileService(volumes *Service, indexManager *indexer.IndexManager, maxUploadBytes int64) *FileService {
 	return &FileService{
-		volumes:      volumes,
-		paths:        NewPathResolver(),
-		metadata:     NewMetadataCache(),
-		thumbnails:   NewThumbnailGenerator(),
-		indexManager: indexManager,
+		volumes:        volumes,
+		paths:          NewPathResolver(),
+		metadata:       NewMetadataCache(),
+		thumbnails:     NewThumbnailGenerator(),
+		indexManager:   indexManager,
+		maxUploadBytes: maxUploadBytes,
 	}
 }
 
@@ -151,9 +153,6 @@ func (s *FileService) Upload(claims *auth.Claims, volumeID uuid.UUID, relDir, fi
 	if err := ValidateExtension(vol.Filters, filename); err != nil {
 		return nil, err
 	}
-	if err := QuotaAllows(vol, size); err != nil {
-		return nil, err
-	}
 
 	targetRel := filename
 	if clean := cleanRelativePath(relDir); clean != "." && clean != "" {
@@ -168,28 +167,58 @@ func (s *FileService) Upload(claims *auth.Claims, volumeID uuid.UUID, relDir, fi
 		return nil, err
 	}
 
+	var previousSize int64
+	var previousRecord *FileMetadataRecord
+	if info, err := os.Stat(absPath); err == nil {
+		if info.IsDir() {
+			return nil, ErrNotDirectory
+		}
+		previousSize = info.Size()
+		if rec, err := s.metadata.ReadByRelativePath(vol.RootPath, targetRel); err == nil {
+			previousRecord = &rec
+		}
+	}
+
+	if size > 0 {
+		if err := QuotaAllows(vol, size-previousSize); err != nil {
+			return nil, err
+		}
+	}
+
+	tmpPath := absPath + ".upload-" + uuid.NewString()
+	promoted := false
+	defer func() {
+		if !promoted {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
 	hasher := sha256.New()
-	tee := io.TeeReader(reader, hasher)
-	file, err := os.Create(absPath)
+	limited := io.LimitReader(reader, s.maxUploadBytes+1)
+	tmpFile, err := os.Create(tmpPath)
 	if err != nil {
 		return nil, err
 	}
-	written, err := io.Copy(file, tee)
-	if closeErr := file.Close(); closeErr != nil && err == nil {
+	written, err := io.Copy(tmpFile, io.TeeReader(limited, hasher))
+	if closeErr := tmpFile.Close(); closeErr != nil && err == nil {
 		err = closeErr
 	}
 	if err != nil {
-		_ = os.Remove(absPath)
 		return nil, err
 	}
+	if written > s.maxUploadBytes {
+		return nil, ErrUploadTooLarge
+	}
 	if size > 0 && written != size {
-		_ = os.Remove(absPath)
-		return nil, ErrQuotaExceeded
+		return nil, ErrUploadSizeMismatch
+	}
+	if err := QuotaAllows(vol, written-previousSize); err != nil {
+		return nil, err
 	}
 
-	mimeType := detectMime(absPath, filename)
+	mimeType := detectMime(tmpPath, filename)
 	modified := time.Now().UTC()
-	if info, err := os.Stat(absPath); err == nil {
+	if info, err := os.Stat(tmpPath); err == nil {
 		modified = info.ModTime().UTC()
 	}
 
@@ -205,7 +234,7 @@ func (s *FileService) Upload(claims *auth.Claims, volumeID uuid.UUID, relDir, fi
 	}
 
 	if isImageMime(mimeType) {
-		imageFile, err := os.Open(absPath)
+		imageFile, err := os.Open(tmpPath)
 		if err == nil {
 			if thumbPath, err := s.thumbnails.Generate(vol.RootPath, fileID, imageFile); err == nil {
 				record.ThumbnailPath = thumbPath
@@ -214,12 +243,25 @@ func (s *FileService) Upload(claims *auth.Claims, volumeID uuid.UUID, relDir, fi
 		}
 	}
 
+	if err := os.Rename(tmpPath, absPath); err != nil {
+		_ = s.thumbnails.Delete(vol.RootPath, fileID)
+		return nil, err
+	}
+	promoted = true
+
+	if previousRecord != nil {
+		_ = s.thumbnails.Delete(vol.RootPath, previousRecord.ID)
+		_ = s.metadata.Delete(vol.RootPath, previousRecord.ID)
+	}
+
 	if err := s.metadata.Write(vol.RootPath, record); err != nil {
+		s.rollbackUploadedFile(vol, absPath, record)
 		return nil, err
 	}
 
 	idx, err := s.indexManager.Get(vol.RootPath)
 	if err != nil {
+		s.rollbackUploadedFile(vol, absPath, record)
 		return nil, err
 	}
 	if err := idx.Index(indexer.FileMetadata{
@@ -231,10 +273,19 @@ func (s *FileService) Upload(claims *auth.Claims, volumeID uuid.UUID, relDir, fi
 		ModifiedAt:   record.ModifiedAt,
 		SHA256:       record.SHA256,
 	}); err != nil {
+		s.rollbackUploadedFile(vol, absPath, record)
 		return nil, err
 	}
 
-	if err := s.volumes.syncUsage(vol, vol.UsedBytes+written); err != nil {
+	newUsed := vol.UsedBytes - previousSize + written
+	if newUsed < 0 {
+		newUsed = 0
+	}
+	if err := s.volumes.syncUsage(vol, newUsed); err != nil {
+		s.rollbackUploadedFile(vol, absPath, record)
+		if idx, idxErr := s.indexManager.Get(vol.RootPath); idxErr == nil {
+			_ = idx.Delete(record.RelativePath)
+		}
 		return nil, err
 	}
 
@@ -247,6 +298,12 @@ func (s *FileService) Upload(claims *auth.Claims, volumeID uuid.UUID, relDir, fi
 		ModifiedAt:   modified,
 		HasThumbnail: record.ThumbnailPath != "",
 	}, nil
+}
+
+func (s *FileService) rollbackUploadedFile(vol *Volume, absPath string, record FileMetadataRecord) {
+	_ = os.Remove(absPath)
+	_ = s.thumbnails.Delete(vol.RootPath, record.ID)
+	_ = s.metadata.Delete(vol.RootPath, record.ID)
 }
 
 func (s *FileService) OpenContent(claims *auth.Claims, volumeID uuid.UUID, relPath string) (*os.File, string, error) {

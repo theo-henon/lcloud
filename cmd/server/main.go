@@ -41,7 +41,7 @@ func main() {
 	diskRegistry := volume.NewDiskRegistry(cfg)
 	indexManager := indexer.NewIndexManager()
 	volumeService := volume.NewService(db, diskRegistry, indexManager)
-	fileService := volume.NewFileService(volumeService, indexManager)
+	fileService := volume.NewFileService(volumeService, indexManager, cfg.MaxUploadBytes)
 
 	staticFS, err := fs.Sub(staticEmbed, "static")
 	if err != nil {

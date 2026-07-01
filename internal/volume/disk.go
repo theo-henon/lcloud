@@ -4,7 +4,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/theo-henon/lcloud/internal/config"
 )
@@ -113,8 +112,4 @@ func checkWritable(path string) error {
 		return err
 	}
 	return os.Remove(testFile)
-}
-
-func diskNameFromPath(path string) string {
-	return strings.TrimSpace(filepath.Base(filepath.Clean(path)))
 }

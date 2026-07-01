@@ -4,7 +4,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"path/filepath"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -136,7 +135,7 @@ func (h *FileHandler) Download(c *gin.Context) {
 		mimeType = "application/octet-stream"
 	}
 	c.Header("Content-Type", mimeType)
-	c.Header("Content-Disposition", "attachment; filename="+filepath.Base(relPath))
+	c.Header("Content-Disposition", httputil.ContentDispositionAttachment(relPath))
 	c.Status(http.StatusOK)
 	_, _ = io.Copy(c.Writer, file)
 }
@@ -210,6 +209,10 @@ func mapFileError(c *gin.Context, err error) {
 		httputil.Unprocessable(c, "FILE_FILTER_REJECTED", "file extension not allowed")
 	case errors.Is(err, volume.ErrQuotaExceeded):
 		httputil.Unprocessable(c, "QUOTA_EXCEEDED", "quota exceeded")
+	case errors.Is(err, volume.ErrUploadTooLarge):
+		httputil.Error(c, http.StatusRequestEntityTooLarge, "UPLOAD_TOO_LARGE", "upload exceeds max size")
+	case errors.Is(err, volume.ErrUploadSizeMismatch):
+		httputil.BadRequest(c, "upload size mismatch")
 	case errors.Is(err, volume.ErrDirectoryExists):
 		httputil.Conflict(c, "directory already exists")
 	case errors.Is(err, volume.ErrNotDirectory):
