@@ -11,6 +11,9 @@ import (
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
 	"github.com/theo-henon/lcloud/internal/auth"
+	"github.com/theo-henon/lcloud/internal/config"
+	"github.com/theo-henon/lcloud/internal/indexer"
+	"github.com/theo-henon/lcloud/internal/volume"
 	"gorm.io/gorm"
 )
 
@@ -21,14 +24,29 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *auth.Service) {
 	dsn := "file:" + t.Name() + "?mode=memory&cache=private"
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&auth.User{}, &auth.RefreshToken{}))
+	require.NoError(t, db.AutoMigrate(&auth.User{}, &auth.RefreshToken{}, &volume.Volume{}))
 
 	service := auth.NewService(db, "01234567890123456789012345678901", 24, 7)
 	require.NoError(t, service.SeedAdmin("admin@example.com", "adminpass1"))
 
+	storageRoot := t.TempDir()
+	cfg := &config.Config{
+		StorageBasePath:  storageRoot,
+		StorageDiskPaths: []string{storageRoot},
+		MaxUploadBytes:   10 * 1024 * 1024,
+	}
+	diskRegistry := volume.NewDiskRegistry(cfg)
+	indexManager := indexer.NewIndexManager()
+	volumeService := volume.NewService(db, diskRegistry, indexManager)
+	fileService := volume.NewFileService(volumeService, indexManager, cfg.MaxUploadBytes)
+
 	router := NewRouter(RouterConfig{
-		AuthService: service,
-		GinMode:     gin.TestMode,
+		AuthService:    service,
+		DiskRegistry:   diskRegistry,
+		VolumeService:  volumeService,
+		FileService:    fileService,
+		MaxUploadBytes: cfg.MaxUploadBytes,
+		GinMode:        gin.TestMode,
 	})
 
 	return router, service

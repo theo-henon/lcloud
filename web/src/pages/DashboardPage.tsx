@@ -8,7 +8,7 @@ export function DashboardPage() {
     <>
       <Header
         title="Dashboard"
-        description="Your lcloud instance is running. Volume management arrives in Phase 1.1."
+        description="Your lcloud instance is running. Create volumes and upload files from the Volumes page."
       />
       <section className="px-8 py-6">
         <div className="rounded-lg border border-hairline bg-surface-card p-6">

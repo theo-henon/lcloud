@@ -6,13 +6,15 @@ A self-hosted, open-source, and extensible cloud storage platform. Deploy it on 
 
 ## Current state
 
-**Current phase:** Phase 0 — Technical foundations
+**Current phase:** Phase 1.1 — Volume management
 **Target MVP:** End of Phase 1.4
 
 > Full startup plan: [STARTUP.md](./STARTUP.md)
 > Strategic vision: [VISION.md](./VISION.md)
 > Stack and architecture: [docs/project.md](./docs/project.md)
 > Parked ideas: [IDEAS.md](./IDEAS.md)
+
+Phase 1.1 delivers volume CRUD, multi-disk selection, file upload/download, extension filters, quotas, thumbnails, and Bleve metadata indexing.
 
 ---
 
@@ -28,6 +30,7 @@ A self-hosted, open-source, and extensible cloud storage platform. Deploy it on 
 git clone https://github.com/theo-henon/lcloud
 cd lcloud
 cp .env.example .env
+mkdir -p ./data/disks/ssd ./data/disks/hdd1 ./data/disks/hdd2
 ```
 
 ### Environment variables
@@ -39,8 +42,26 @@ POSTGRES_DB=
 JWT_SECRET=
 ADMIN_EMAIL=
 ADMIN_PASSWORD=
-STORAGE_BASE_PATH=
+STORAGE_BASE_PATH=./data/storage
+STORAGE_DISK_PATHS=/data/disks/ssd,/data/disks/hdd1,/data/disks/hdd2
+STORAGE_DISK_LABELS=SSD,HDD 1,HDD 2
+MAX_UPLOAD_BYTES=104857600
 ```
+
+### Multi-disk setup
+
+Each physical disk is mounted independently into the Docker container. Example from `.env.example`:
+
+```
+DISK_SSD=/mnt/ssd          # host path
+DISK_HDD1=/mnt/hdd1
+DISK_HDD2=/mnt/hdd2
+STORAGE_DISK_PATHS=/data/disks/ssd,/data/disks/hdd1,/data/disks/hdd2
+```
+
+`docker-compose.yml` maps host paths to container paths under `/data/disks/*`. At volume creation, pick one registered disk from the UI.
+
+If `STORAGE_DISK_PATHS` is empty, lcloud falls back to scanning subdirectories of `STORAGE_BASE_PATH` (local dev convenience).
 
 ### Launch
 ```bash

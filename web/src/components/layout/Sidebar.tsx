@@ -23,7 +23,7 @@ const navGroups: NavGroup[] = [
   {
     title: "Storage",
     items: [
-      { label: "Volumes", to: "/volumes", soon: true },
+      { label: "Volumes", to: "/volumes" },
       { label: "Monitoring", to: "/monitoring", soon: true },
     ],
   },

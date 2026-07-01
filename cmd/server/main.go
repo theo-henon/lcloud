@@ -9,6 +9,7 @@ import (
 	"github.com/theo-henon/lcloud/internal/api"
 	"github.com/theo-henon/lcloud/internal/auth"
 	"github.com/theo-henon/lcloud/internal/config"
+	"github.com/theo-henon/lcloud/internal/indexer"
 	"github.com/theo-henon/lcloud/internal/volume"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -37,15 +38,24 @@ func main() {
 		log.Fatalf("seed admin: %v", err)
 	}
 
+	diskRegistry := volume.NewDiskRegistry(cfg)
+	indexManager := indexer.NewIndexManager()
+	volumeService := volume.NewService(db, diskRegistry, indexManager)
+	fileService := volume.NewFileService(volumeService, indexManager, cfg.MaxUploadBytes)
+
 	staticFS, err := fs.Sub(staticEmbed, "static")
 	if err != nil {
 		log.Fatalf("static fs: %v", err)
 	}
 
 	router := api.NewRouter(api.RouterConfig{
-		AuthService: authService,
-		StaticFS:    staticFS,
-		GinMode:     cfg.GinMode,
+		AuthService:    authService,
+		DiskRegistry:   diskRegistry,
+		VolumeService:  volumeService,
+		FileService:    fileService,
+		MaxUploadBytes: cfg.MaxUploadBytes,
+		StaticFS:       staticFS,
+		GinMode:        cfg.GinMode,
 	})
 
 	addr := ":" + cfg.AppPort

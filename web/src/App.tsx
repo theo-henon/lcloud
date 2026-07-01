@@ -6,6 +6,8 @@ import { DashboardPage } from "@/pages/DashboardPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { PlaceholderPage } from "@/pages/PlaceholderPage";
+import { VolumeDetailPage } from "@/pages/VolumeDetailPage";
+import { VolumesPage } from "@/pages/VolumesPage";
 import { useAuthStore } from "@/store/auth";
 
 function AppRoutes() {
@@ -23,16 +25,8 @@ function AppRoutes() {
         <Route element={<AppShell />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
-          <Route
-            path="/volumes"
-            element={
-              <PlaceholderPage
-                title="Volumes"
-                phase="Phase 1.1"
-                description="Create and manage storage volumes on your disks."
-              />
-            }
-          />
+          <Route path="/volumes" element={<VolumesPage />} />
+          <Route path="/volumes/:id" element={<VolumeDetailPage />} />
           <Route
             path="/monitoring"
             element={
