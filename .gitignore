@@ -1,0 +1,30 @@
+# Environment
+.env
+.env.local
+
+# Go
+/bin/
+/dist/
+cmd/server/static/*
+!cmd/server/static/.keep
+*.exe
+*.test
+coverage.out
+
+# Frontend
+web/node_modules/
+web/dist/
+web/.vite/
+
+# Plugins (binaries only — directory tracked via .gitkeep)
+plugins/*
+!plugins/.gitkeep
+
+# Storage runtime data
+data/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+*.swp

@@ -1,0 +1,2 @@
+# Generated frontend assets live here.
+# Run `make embed` before `go build ./cmd/server` or `go run ./cmd/server`.
