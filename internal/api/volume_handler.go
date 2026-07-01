@@ -46,13 +46,13 @@ func (h *VolumeHandler) List(c *gin.Context) {
 		httputil.InternalError(c, "unable to list volumes")
 		return
 	}
-	if masked, err := h.settings.ShouldMaskFor(claims); err != nil {
-		httputil.InternalError(c, "unable to load settings")
-		return
-	} else if masked {
-		for i := range volumes {
-			volumes[i] = maskVolume(volumes[i])
+	for i := range volumes {
+		masked, err := h.maskVolumeIfNeeded(claims, volumes[i])
+		if err != nil {
+			httputil.InternalError(c, "unable to load settings")
+			return
 		}
+		volumes[i] = masked
 	}
 	httputil.JSON(c, http.StatusOK, gin.H{"volumes": volumes})
 }
@@ -80,7 +80,12 @@ func (h *VolumeHandler) Create(c *gin.Context) {
 		mapVolumeError(c, err)
 		return
 	}
-	httputil.JSON(c, http.StatusCreated, vol)
+	masked, err := h.maskVolumeIfNeeded(claims, *vol)
+	if err != nil {
+		httputil.InternalError(c, "unable to load settings")
+		return
+	}
+	httputil.JSON(c, http.StatusCreated, masked)
 }
 
 func (h *VolumeHandler) Get(c *gin.Context) {
@@ -101,13 +106,12 @@ func (h *VolumeHandler) Get(c *gin.Context) {
 		mapVolumeError(c, err)
 		return
 	}
-	if masked, err := h.settings.ShouldMaskFor(claims); err != nil {
+	masked, err := h.maskVolumeIfNeeded(claims, *vol)
+	if err != nil {
 		httputil.InternalError(c, "unable to load settings")
 		return
-	} else if masked {
-		vol = maskVolumePtr(vol)
 	}
-	httputil.JSON(c, http.StatusOK, vol)
+	httputil.JSON(c, http.StatusOK, masked)
 }
 
 func (h *VolumeHandler) Patch(c *gin.Context) {
@@ -138,7 +142,12 @@ func (h *VolumeHandler) Patch(c *gin.Context) {
 		mapVolumeError(c, err)
 		return
 	}
-	httputil.JSON(c, http.StatusOK, vol)
+	masked, err := h.maskVolumeIfNeeded(claims, *vol)
+	if err != nil {
+		httputil.InternalError(c, "unable to load settings")
+		return
+	}
+	httputil.JSON(c, http.StatusOK, masked)
 }
 
 func (h *VolumeHandler) Delete(c *gin.Context) {
@@ -179,4 +188,15 @@ func mapVolumeError(c *gin.Context, err error) {
 	default:
 		httputil.InternalError(c, "volume operation failed")
 	}
+}
+
+func (h *VolumeHandler) maskVolumeIfNeeded(claims *auth.Claims, vol volume.Volume) (volume.Volume, error) {
+	mask, err := h.settings.ShouldMaskFor(claims)
+	if err != nil {
+		return volume.Volume{}, err
+	}
+	if mask {
+		return maskVolume(vol), nil
+	}
+	return vol, nil
 }

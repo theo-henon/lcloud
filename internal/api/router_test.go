@@ -19,7 +19,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func setupTestRouter(t *testing.T) (*gin.Engine, *auth.Service) {
+func setupTestRouter(t *testing.T) (*gin.Engine, *auth.Service, *volume.Service, string) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -58,11 +58,16 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *auth.Service) {
 		GinMode:           gin.TestMode,
 	})
 
+	return router, service, volumeService, storageRoot
+}
+
+func setupTestRouterLegacy(t *testing.T) (*gin.Engine, *auth.Service) {
+	router, service, _, _ := setupTestRouter(t)
 	return router, service
 }
 
 func TestHealth(t *testing.T) {
-	router, _ := setupTestRouter(t)
+	router, _ := setupTestRouterLegacy(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/health", nil)
 	rec := httptest.NewRecorder()
@@ -72,7 +77,7 @@ func TestHealth(t *testing.T) {
 }
 
 func TestMeUnauthorized(t *testing.T) {
-	router, _ := setupTestRouter(t)
+	router, _ := setupTestRouterLegacy(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
 	rec := httptest.NewRecorder()
@@ -81,7 +86,7 @@ func TestMeUnauthorized(t *testing.T) {
 }
 
 func TestLoginBadRequest(t *testing.T) {
-	router, _ := setupTestRouter(t)
+	router, _ := setupTestRouterLegacy(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader([]byte(`{}`)))
 	req.Header.Set("Content-Type", "application/json")
@@ -91,7 +96,7 @@ func TestLoginBadRequest(t *testing.T) {
 }
 
 func TestAuthFlow(t *testing.T) {
-	router, service := setupTestRouter(t)
+	router, service := setupTestRouterLegacy(t)
 
 	loginBody := []byte(`{"email":"admin@example.com","password":"adminpass1"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(loginBody))
@@ -133,7 +138,7 @@ func TestAuthFlow(t *testing.T) {
 }
 
 func TestAdminCreateUserForbiddenForRegularUser(t *testing.T) {
-	router, service := setupTestRouter(t)
+	router, service := setupTestRouterLegacy(t)
 
 	_, err := service.CreateUser("user@example.com", "password123", auth.RoleUser)
 	require.NoError(t, err)
@@ -151,7 +156,7 @@ func TestAdminCreateUserForbiddenForRegularUser(t *testing.T) {
 }
 
 func TestAdminCreateUserInvalidRole(t *testing.T) {
-	router, _ := setupTestRouter(t)
+	router, _ := setupTestRouterLegacy(t)
 
 	loginBody := []byte(`{"email":"admin@example.com","password":"adminpass1"}`)
 	loginReq := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(loginBody))
@@ -173,7 +178,7 @@ func TestAdminCreateUserInvalidRole(t *testing.T) {
 }
 
 func TestAdminCreateUser(t *testing.T) {
-	router, _ := setupTestRouter(t)
+	router, _ := setupTestRouterLegacy(t)
 
 	loginBody := []byte(`{"email":"admin@example.com","password":"adminpass1"}`)
 	loginReq := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(loginBody))
@@ -195,7 +200,7 @@ func TestAdminCreateUser(t *testing.T) {
 }
 
 func TestAdminPatchSettings(t *testing.T) {
-	router, _ := setupTestRouter(t)
+	router, _ := setupTestRouterLegacy(t)
 
 	loginBody := []byte(`{"email":"admin@example.com","password":"adminpass1"}`)
 	loginReq := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(loginBody))

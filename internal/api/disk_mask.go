@@ -19,13 +19,6 @@ func maskDiskInfo(disk volume.DiskInfo, index int) volume.DiskInfo {
 
 func maskVolume(vol volume.Volume) volume.Volume {
 	vol.DiskPath = ""
+	vol.RootPath = ""
 	return vol
-}
-
-func maskVolumePtr(vol *volume.Volume) *volume.Volume {
-	if vol == nil {
-		return nil
-	}
-	masked := maskVolume(*vol)
-	return &masked
 }

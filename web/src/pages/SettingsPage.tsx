@@ -58,8 +58,8 @@ export function SettingsPage() {
             </h2>
             <p className="mt-2 text-sm text-body">
               When enabled, disk paths and labels are replaced with generic names such as
-              &quot;Storage 1&quot; across Monitoring and Volumes. Real disk names remain
-              visible only when an administrator creates a new volume.
+              &quot;Storage 1&quot; across Monitoring and Volumes. Only administrators can
+              create volumes and see real disk names when doing so.
             </p>
           </div>
 

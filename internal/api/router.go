@@ -213,7 +213,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			protected.GET("/search", searchHandler.SearchAll)
 
 			protected.GET("/volumes", volumeHandler.List)
-			protected.POST("/volumes", volumeHandler.Create)
+			protected.POST("/volumes", auth.RequireAdmin(), volumeHandler.Create)
 			protected.GET("/volumes/:id", volumeHandler.Get)
 			protected.PATCH("/volumes/:id", volumeHandler.Patch)
 			protected.DELETE("/volumes/:id", volumeHandler.Delete)

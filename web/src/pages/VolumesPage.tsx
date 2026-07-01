@@ -34,9 +34,11 @@ export function VolumesPage() {
         title="Volumes"
         description="Create and manage storage volumes on your physical disks."
         action={
-          <Button onClick={() => setShowCreate(true)} disabled={disks.length === 0}>
-            Create volume
-          </Button>
+          user?.role === "admin" ? (
+            <Button onClick={() => setShowCreate(true)} disabled={disks.length === 0}>
+              Create volume
+            </Button>
+          ) : undefined
         }
       />
 

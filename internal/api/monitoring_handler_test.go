@@ -64,7 +64,7 @@ func uploadPNG(t *testing.T, router http.Handler, token, volumeID, filename stri
 }
 
 func TestMonitoringOverview(t *testing.T) {
-	router, _ := setupTestRouter(t)
+	router, _ := setupTestRouterLegacy(t)
 	token := loginAsAdmin(t, router)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/monitoring/overview", nil)
@@ -79,7 +79,7 @@ func TestMonitoringOverview(t *testing.T) {
 }
 
 func TestMonitoringVolumeStatsAndSearch(t *testing.T) {
-	router, _ := setupTestRouter(t)
+	router, _ := setupTestRouterLegacy(t)
 	token := loginAsAdmin(t, router)
 
 	disksReq := httptest.NewRequest(http.MethodGet, "/api/disks", nil)
@@ -146,7 +146,7 @@ func TestMonitoringVolumeStatsAndSearch(t *testing.T) {
 }
 
 func TestMonitoringForbiddenForOtherUserVolume(t *testing.T) {
-	router, service := setupTestRouter(t)
+	router, service := setupTestRouterLegacy(t)
 	adminToken := loginAsAdmin(t, router)
 
 	disksReq := httptest.NewRequest(http.MethodGet, "/api/disks", nil)
