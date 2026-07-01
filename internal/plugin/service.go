@@ -3,9 +3,6 @@ package plugin
 import (
 	"context"
 	"log/slog"
-	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/google/uuid"
 	"github.com/theo-henon/lcloud/internal/auth"
@@ -53,15 +50,6 @@ func (s *Service) Start(ctx context.Context) error {
 
 func (s *Service) Stop() {
 	s.runtime.StopAll()
-}
-
-func (s *Service) ListenForShutdown() {
-	go func() {
-		ch := make(chan os.Signal, 1)
-		signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
-		<-ch
-		s.Stop()
-	}()
 }
 
 func (s *Service) List() ([]Plugin, error) {

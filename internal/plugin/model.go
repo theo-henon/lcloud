@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/theo-henon/lcloud/internal/volume"
-	"gorm.io/gorm"
 )
 
 const maxLogEntriesPerPlugin = 500
@@ -75,8 +74,8 @@ type Plugin struct {
 	Version       string       `gorm:"not null" json:"version"`
 	Description   string       `json:"description"`
 	Author        string       `json:"author"`
-	BinaryPath    string       `gorm:"not null" json:"binary_path"`
-	ManifestPath  string       `gorm:"not null" json:"manifest_path"`
+	BinaryPath    string       `gorm:"not null" json:"-"`
+	ManifestPath  string       `gorm:"not null" json:"-"`
 	Enabled       bool         `gorm:"not null;default:true" json:"enabled"`
 	Status        PluginStatus `gorm:"not null;default:stopped" json:"status"`
 	Subscriptions StringArray  `gorm:"type:jsonb;not null" json:"subscriptions"`
@@ -95,10 +94,6 @@ type PluginLogEntry struct {
 	Message   string     `gorm:"not null" json:"message"`
 	Payload   JSON       `gorm:"type:jsonb" json:"payload,omitempty"`
 	CreatedAt time.Time  `gorm:"index" json:"created_at"`
-}
-
-func (PluginLogEntry) BeforeCreate(tx *gorm.DB) error {
-	return nil
 }
 
 type LogLevel string

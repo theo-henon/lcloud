@@ -163,6 +163,11 @@ func subscribesTo(subs []string, eventType string) bool {
 }
 
 func (r *Runtime) dispatch(ctx context.Context, p *runningPlugin, event Event) {
+	host := NewHostAPIServer(p.record.ID, r.bus, r.registry, r.volumes)
+	if event.VolumeID != "" {
+		_, _ = host.PluginDataDir(ctx, event.VolumeID, p.record.ID)
+	}
+
 	result, err := p.api.HandleEvent(ctx, event)
 	if err != nil {
 		r.logger.Error("plugin handle event failed", "plugin_id", p.record.ID, "event", event.Type, "error", err)
@@ -180,7 +185,6 @@ func (r *Runtime) dispatch(ctx context.Context, p *runningPlugin, event Event) {
 		return
 	}
 
-	host := NewHostAPIServer(p.record.ID, r.bus, r.registry, r.volumes)
 	for _, logReq := range result.Logs {
 		if logReq.PluginID == "" {
 			logReq.PluginID = p.record.ID

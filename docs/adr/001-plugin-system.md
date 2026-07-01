@@ -22,9 +22,9 @@ Requirements:
 
 ## Decision
 
-### Runtime: HashiCorp go-plugin with GRPC protocol
+### Runtime: HashiCorp go-plugin with net/rpc protocol
 
-Use `github.com/hashicorp/go-plugin` with GRPC handshake. Each plugin binary is a separate OS process. One subprocess per plugin ID.
+Use `github.com/hashicorp/go-plugin` with the **net/rpc** protocol (not GRPC — avoids a protoc build step in MVP). Each plugin binary is a separate OS process. One subprocess per plugin ID.
 
 ### Event bus: in-process pub/sub
 
@@ -38,13 +38,24 @@ Each binary requires a `{name}.json` manifest next to the executable with `id`, 
 
 - Plugin registry state: PostgreSQL `plugins` table (synced from filesystem scan at startup)
 - Activity feed: PostgreSQL `plugin_log_entries` (500 entries max per plugin, purge on insert)
-- Per-volume plugin data: `{volume.root}/plugins/{plugin-id}/` created lazily on first event
+- Per-volume plugin data: `{volume.root}/plugins/{plugin-id}/` created lazily by the host on first dispatched event
 
 ### RPC interfaces
 
 **LcloudPlugin** (plugin implements): `HandleEvent(ctx, event) → HandleResult`
 
 **HostAPI** (host implements): `Emit`, `Log`, `GetVolumeConfig`, `PluginDataDir`
+
+### MVP plugin ↔ host communication
+
+In Phase 1.3, plugins communicate **outbound** via `HandleResult` only:
+
+- `HandleResult.Logs` → persisted to the activity feed
+- `HandleResult.Emit` → re-published on the event bus
+
+The host does **not** expose HostAPI as a reverse RPC channel to the plugin subprocess in MVP. Instead, the host calls `PluginDataDir` internally when dispatching an event with a `volume_id`, ensuring `{volume}/plugins/{plugin-id}/` exists before `HandleEvent` runs.
+
+Bidirectional HostAPI (plugin calls `Log` / `Emit` / `GetVolumeConfig` during `HandleEvent`) is deferred post-MVP; RPC types in `internal/plugin/rpc.go` are prepared for that upgrade.
 
 ### Domain coupling
 
@@ -57,6 +68,12 @@ Each binary requires a `{name}.json` manifest next to the executable with `id`, 
 Defined but deferred: `file.moved`, `file.renamed`, `task.executed`, `task.failed`, `volume.alert.usage`
 
 ## Alternatives considered
+
+### GRPC protocol (go-plugin)
+
+- Pros: typed contracts, multi-language stubs
+- Cons: requires protoc/codegen in build pipeline
+- Rejected for MVP; net/rpc chosen for simplicity. GRPC migration possible without changing the manifest or event model.
 
 ### WASM runtime
 
@@ -84,10 +101,11 @@ Defined but deferred: `file.moved`, `file.renamed`, `task.executed`, `task.faile
 
 ## Consequences
 
-- Plugin authors need Go (or any GRPC-capable language) + manifest; SDK stub in `pkg/pluginsdk/`
+- Plugin authors need Go (or any go-plugin net/rpc-capable language) + manifest; SDK stub in `pkg/pluginsdk/`
 - ADR required before expanding HostAPI surface
 - Phase 1.4 wires `task.executed` emission into the same bus
 - Docker mounts `plugins/` read-only via `PLUGINS_PATH`
+- REST API responses omit host filesystem paths (`binary_path`, `manifest_path`)
 
 ## Security rules
 
@@ -95,3 +113,4 @@ Defined but deferred: `file.moved`, `file.renamed`, `task.executed`, `task.faile
 - Plugins write only to `{volume}/plugins/{plugin-id}/`
 - Enable/disable is admin-only
 - Plugin validation is audit-only; core filter rejects bad uploads before save
+- Plugin registry API does not expose server filesystem paths to clients

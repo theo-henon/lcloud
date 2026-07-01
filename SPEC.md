@@ -61,7 +61,7 @@ Phase 1.3 adds:
 |---|---|
 | Backend | `github.com/hashicorp/go-plugin` — subprocess RPC (GRPC handshake) |
 | Backend | PostgreSQL models: `Plugin`, `PluginLogEntry` |
-| Example | `plugins/file-type-validator/` — reference Go plugin binary + manifest |
+| Example | `examples/file-type-validator/` — reference Go plugin source + manifest |
 | SDK | `pkg/pluginsdk/` — minimal Go helpers for plugin authors |
 | Docs | `docs/plugins/README.md` — how to write a plugin |
 
@@ -76,7 +76,7 @@ Phase 1.3 adds:
 go get github.com/hashicorp/go-plugin
 
 # Build example plugin
-go build -o plugins/file-type-validator ./plugins/file-type-validator
+go build -o plugins/file-type-validator ./examples/file-type-validator
 
 # Backend tests (plugin module focus)
 go test ./internal/plugin/... -cover
@@ -94,8 +94,8 @@ docker compose logs -f app
 
 ```bash
 # 1. Build and place example plugin
-go build -o plugins/file-type-validator ./plugins/file-type-validator
-cp plugins/file-type-validator.json plugins/file-type-validator.json  # manifest sidecar
+go build -o plugins/file-type-validator ./examples/file-type-validator
+cp examples/file-type-validator/file-type-validator.json plugins/file-type-validator.json  # manifest sidecar
 
 # 2. Restart stack
 docker compose up -d --build
@@ -602,7 +602,7 @@ See [docs/project.md — Coverage targets](./docs/project.md#coverage-targets).
 | Backend integration | Mock plugin binary (test helper) handles event | `internal/plugin/runtime_test.go` |
 | Backend integration | Plugin API handlers enable/disable | `internal/api/plugin_handler_test.go` |
 | Backend integration | File upload emits event (mock publisher) | `internal/volume/file_service_test.go` |
-| Example plugin | Validator logic | `plugins/file-type-validator/validator_test.go` |
+| Example plugin | Validator logic | `examples/file-type-validator/validator_test.go` |
 | Frontend unit | PluginList, PluginStatusBadge, activity feed | `web/src/components/plugins/*.test.tsx` |
 
 **Coverage target:** 80% minimum on `internal/plugin/`.
@@ -610,7 +610,7 @@ See [docs/project.md — Coverage targets](./docs/project.md#coverage-targets).
 **Verify before ship:**
 
 ```bash
-go build -o plugins/file-type-validator ./plugins/file-type-validator
+go build -o plugins/file-type-validator ./examples/file-type-validator
 go test ./internal/plugin/... -cover
 go test ./...
 cd web && npm run test

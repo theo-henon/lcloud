@@ -73,7 +73,7 @@ Core upload filter rejects disallowed extensions before save. To demo `validatio
 
 ## Host API (MVP)
 
-Plugins return logs and custom events via `HandleResult`:
+Plugins return logs and custom events via `HandleResult` — there is no reverse RPC channel from plugin to host in Phase 1.3:
 
 ```go
 return &plugincore.HandleResult{
@@ -81,6 +81,8 @@ return &plugincore.HandleResult{
     Emit: []plugincore.Event{plugincore.NewCustomEvent("my.event", volumeID, payload)},
 }, nil
 ```
+
+The host creates `{volume}/plugins/{plugin-id}/` automatically when dispatching the first event for that volume. Plugins should write state files only under that directory.
 
 ## Environment
 

@@ -80,6 +80,8 @@ func TestPluginList(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.NotNil(t, resp.Plugins)
+	require.NotContains(t, rec.Body.String(), "binary_path")
+	require.NotContains(t, rec.Body.String(), "manifest_path")
 }
 
 func TestPluginLogsEmpty(t *testing.T) {

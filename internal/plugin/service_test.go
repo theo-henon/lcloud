@@ -2,6 +2,8 @@ package plugin
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -126,7 +128,11 @@ func TestRuntimeStopAll(t *testing.T) {
 func TestRuntimeDispatchSuccess(t *testing.T) {
 	db := openTestDB(t)
 	registry := NewRegistry(db, t.TempDir(), nil)
-	runtime := NewRuntime(registry, NewEventBus(), stubVolumeProvider{}, nil)
+	volRoot := t.TempDir()
+	volID := uuid.New()
+	runtime := NewRuntime(registry, NewEventBus(), stubVolumeProvider{
+		vol: &volume.Volume{ID: volID, RootPath: volRoot, Name: "Demo"},
+	}, nil)
 
 	now := time.Now().UTC()
 	record := Plugin{
@@ -148,7 +154,15 @@ func TestRuntimeDispatchSuccess(t *testing.T) {
 	}
 	runtime.mu.Unlock()
 
-	runtime.dispatch(context.Background(), runtime.active["demo"], Event{Type: EventFileUploaded})
+	runtime.dispatch(context.Background(), runtime.active["demo"], Event{
+		Type:     EventFileUploaded,
+		VolumeID: volID.String(),
+	})
+
+	pluginDir := filepath.Join(volRoot, "plugins", "demo")
+	info, err := os.Stat(pluginDir)
+	require.NoError(t, err)
+	require.True(t, info.IsDir())
 }
 
 type mockPluginAPI struct {
