@@ -6,6 +6,7 @@ import { DashboardPage } from "@/pages/DashboardPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { MonitoringPage } from "@/pages/MonitoringPage";
+import { SettingsPage } from "@/pages/SettingsPage";
 import { PlaceholderPage } from "@/pages/PlaceholderPage";
 import { VolumeDetailPage } from "@/pages/VolumeDetailPage";
 import { VolumesPage } from "@/pages/VolumesPage";
@@ -49,16 +50,7 @@ function AppRoutes() {
               />
             }
           />
-          <Route
-            path="/settings"
-            element={
-              <PlaceholderPage
-                title="Settings"
-                phase="Phase 0"
-                description="System preferences will live here."
-              />
-            }
-          />
+          <Route path="/settings" element={<SettingsPage />} />
           <Route element={<AdminRoute />}>
             <Route
               path="/settings/users"

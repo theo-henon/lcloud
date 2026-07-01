@@ -59,7 +59,9 @@ export function VolumeDetailPage() {
     <>
       <Header
         title={volume.name}
-        description={`${volume.disk_path} · ${quotaLabel}`}
+        description={
+          volume.disk_path ? `${volume.disk_path} · ${quotaLabel}` : quotaLabel
+        }
         action={
           <Link
             to="/volumes"

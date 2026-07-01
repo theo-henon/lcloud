@@ -7,16 +7,18 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/theo-henon/lcloud/internal/auth"
+	"github.com/theo-henon/lcloud/internal/settings"
 	"github.com/theo-henon/lcloud/internal/volume"
 	"github.com/theo-henon/lcloud/pkg/httputil"
 )
 
 type VolumeHandler struct {
-	volumes *volume.Service
+	volumes  *volume.Service
+	settings *settings.Service
 }
 
-func NewVolumeHandler(volumes *volume.Service) *VolumeHandler {
-	return &VolumeHandler{volumes: volumes}
+func NewVolumeHandler(volumes *volume.Service, settingsService *settings.Service) *VolumeHandler {
+	return &VolumeHandler{volumes: volumes, settings: settingsService}
 }
 
 type createVolumeRequest struct {
@@ -43,6 +45,14 @@ func (h *VolumeHandler) List(c *gin.Context) {
 	if err != nil {
 		httputil.InternalError(c, "unable to list volumes")
 		return
+	}
+	if masked, err := h.settings.ShouldMaskFor(claims); err != nil {
+		httputil.InternalError(c, "unable to load settings")
+		return
+	} else if masked {
+		for i := range volumes {
+			volumes[i] = maskVolume(volumes[i])
+		}
 	}
 	httputil.JSON(c, http.StatusOK, gin.H{"volumes": volumes})
 }
@@ -90,6 +100,12 @@ func (h *VolumeHandler) Get(c *gin.Context) {
 	if err != nil {
 		mapVolumeError(c, err)
 		return
+	}
+	if masked, err := h.settings.ShouldMaskFor(claims); err != nil {
+		httputil.InternalError(c, "unable to load settings")
+		return
+	} else if masked {
+		vol = maskVolumePtr(vol)
 	}
 	httputil.JSON(c, http.StatusOK, vol)
 }

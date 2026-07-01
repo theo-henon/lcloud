@@ -5,11 +5,9 @@ import { formatBytes } from "@/lib/utils";
 type DiskOverviewCardProps = {
   disk: DiskOverview;
   index: number;
-  maskDiskNames: boolean;
 };
 
-export function DiskOverviewCard({ disk, index, maskDiskNames }: DiskOverviewCardProps) {
-  const title = maskDiskNames ? `Storage ${index + 1}` : disk.label;
+export function DiskOverviewCard({ disk }: DiskOverviewCardProps) {
   const usedPercent =
     disk.total_bytes > 0
       ? Math.min(100, (disk.used_by_volumes_bytes / disk.total_bytes) * 100)
@@ -18,10 +16,8 @@ export function DiskOverviewCard({ disk, index, maskDiskNames }: DiskOverviewCar
   return (
     <Card className="space-y-4 p-5">
       <div>
-        <h3 className="text-lg font-semibold text-ink">{title}</h3>
-        {!maskDiskNames ? (
-          <p className="mt-1 text-sm text-muted">{disk.name}</p>
-        ) : null}
+        <h3 className="text-lg font-semibold text-ink">{disk.label}</h3>
+        {disk.path ? <p className="mt-1 text-sm text-muted">{disk.name}</p> : null}
       </div>
 
       <div className="space-y-2">

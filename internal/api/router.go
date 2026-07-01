@@ -12,6 +12,7 @@ import (
 	"github.com/theo-henon/lcloud/internal/auth"
 	"github.com/theo-henon/lcloud/internal/indexer"
 	"github.com/theo-henon/lcloud/internal/monitoring"
+	"github.com/theo-henon/lcloud/internal/settings"
 	"github.com/theo-henon/lcloud/internal/volume"
 	"github.com/theo-henon/lcloud/pkg/httputil"
 )
@@ -156,6 +157,7 @@ type RouterConfig struct {
 	VolumeService     *volume.Service
 	FileService       *volume.FileService
 	MonitoringService *monitoring.Service
+	SettingsService   *settings.Service
 	IndexManager      *indexer.IndexManager
 	MaxUploadBytes    int64
 	StaticFS          fs.FS
@@ -176,11 +178,13 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 
 	authHandler := NewAuthHandler(cfg.AuthService)
 	adminHandler := NewAdminHandler(cfg.AuthService)
-	diskHandler := NewDiskHandler(cfg.DiskRegistry)
-	volumeHandler := NewVolumeHandler(cfg.VolumeService)
+	diskHandler := NewDiskHandler(cfg.DiskRegistry, cfg.SettingsService)
+	volumeHandler := NewVolumeHandler(cfg.VolumeService, cfg.SettingsService)
 	fileHandler := NewFileHandler(cfg.FileService)
 	monitoringHandler := NewMonitoringHandler(cfg.MonitoringService)
 	searchHandler := NewSearchHandler(cfg.VolumeService, cfg.IndexManager)
+	settingsHandler := NewSettingsHandler(cfg.SettingsService)
+	adminSettingsHandler := NewAdminSettingsHandler(cfg.SettingsService)
 
 	api := router.Group("/api")
 	{
@@ -199,10 +203,12 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		admin := api.Group("/admin", auth.AuthMiddleware(cfg.AuthService), auth.RequireAdmin())
 		{
 			admin.POST("/users", adminHandler.CreateUser)
+			admin.PATCH("/settings", adminSettingsHandler.Patch)
 		}
 
 		protected := api.Group("", auth.AuthMiddleware(cfg.AuthService))
 		{
+			protected.GET("/settings", settingsHandler.Get)
 			protected.GET("/disks", diskHandler.List)
 			protected.GET("/search", searchHandler.SearchAll)
 

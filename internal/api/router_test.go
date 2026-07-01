@@ -14,6 +14,7 @@ import (
 	"github.com/theo-henon/lcloud/internal/config"
 	"github.com/theo-henon/lcloud/internal/indexer"
 	"github.com/theo-henon/lcloud/internal/monitoring"
+	"github.com/theo-henon/lcloud/internal/settings"
 	"github.com/theo-henon/lcloud/internal/volume"
 	"gorm.io/gorm"
 )
@@ -25,10 +26,13 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *auth.Service) {
 	dsn := "file:" + t.Name() + "?mode=memory&cache=private"
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&auth.User{}, &auth.RefreshToken{}, &volume.Volume{}))
+	require.NoError(t, db.AutoMigrate(&auth.User{}, &auth.RefreshToken{}, &volume.Volume{}, &settings.InstanceSettings{}))
 
 	service := auth.NewService(db, "01234567890123456789012345678901", 24, 7)
 	require.NoError(t, service.SeedAdmin("admin@example.com", "adminpass1"))
+
+	settingsService := settings.NewService(db)
+	require.NoError(t, settingsService.EnsureDefaults())
 
 	storageRoot := t.TempDir()
 	cfg := &config.Config{
@@ -39,7 +43,7 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *auth.Service) {
 	diskRegistry := volume.NewDiskRegistry(cfg)
 	indexManager := indexer.NewIndexManager()
 	volumeService := volume.NewService(db, diskRegistry, indexManager)
-	monitoringService := monitoring.NewService(volumeService, diskRegistry)
+	monitoringService := monitoring.NewService(volumeService, diskRegistry, settingsService)
 	fileService := volume.NewFileService(volumeService, indexManager, cfg.MaxUploadBytes, monitoringService.StatsCache())
 
 	router := NewRouter(RouterConfig{
@@ -48,6 +52,7 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *auth.Service) {
 		VolumeService:     volumeService,
 		FileService:       fileService,
 		MonitoringService: monitoringService,
+		SettingsService:   settingsService,
 		IndexManager:      indexManager,
 		MaxUploadBytes:    cfg.MaxUploadBytes,
 		GinMode:           gin.TestMode,
@@ -187,4 +192,40 @@ func TestAdminCreateUser(t *testing.T) {
 	createRec := httptest.NewRecorder()
 	router.ServeHTTP(createRec, createReq)
 	require.Equal(t, http.StatusCreated, createRec.Code)
+}
+
+func TestAdminPatchSettings(t *testing.T) {
+	router, _ := setupTestRouter(t)
+
+	loginBody := []byte(`{"email":"admin@example.com","password":"adminpass1"}`)
+	loginReq := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(loginBody))
+	loginReq.Header.Set("Content-Type", "application/json")
+	loginRec := httptest.NewRecorder()
+	router.ServeHTTP(loginRec, loginReq)
+	require.Equal(t, http.StatusOK, loginRec.Code)
+
+	var loginResp auth.LoginResult
+	require.NoError(t, json.Unmarshal(loginRec.Body.Bytes(), &loginResp))
+
+	patchBody := []byte(`{"mask_disk_names":true}`)
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/admin/settings", bytes.NewReader(patchBody))
+	patchReq.Header.Set("Content-Type", "application/json")
+	patchReq.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+	patchRec := httptest.NewRecorder()
+	router.ServeHTTP(patchRec, patchReq)
+	require.Equal(t, http.StatusOK, patchRec.Code)
+
+	var settingsResp struct {
+		MaskDiskNames bool `json:"mask_disk_names"`
+	}
+	require.NoError(t, json.Unmarshal(patchRec.Body.Bytes(), &settingsResp))
+	require.True(t, settingsResp.MaskDiskNames)
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/settings", nil)
+	getReq.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+	getRec := httptest.NewRecorder()
+	router.ServeHTTP(getRec, getReq)
+	require.Equal(t, http.StatusOK, getRec.Code)
+	require.NoError(t, json.Unmarshal(getRec.Body.Bytes(), &settingsResp))
+	require.True(t, settingsResp.MaskDiskNames)
 }

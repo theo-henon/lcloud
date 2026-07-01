@@ -14,7 +14,7 @@
 3. **Stats source of truth for breakdown** — file type distribution is computed by scanning `./cache/metadata/*.json` (per-file records written in Phase 1.1); `used_bytes` in `.volume.json` remains the source of truth for volume usage totals.
 4. **Aggregated stats are cached on disk** — a single `stats.json` file per volume under `./cache/metadata/` stores precomputed breakdown; invalidated on file upload/delete; recomputed on read or explicit refresh.
 5. **`compute_stats` macro is Phase 1.4** — Phase 1.2 implements the stats computation function and a manual refresh API; Phase 1.4 wires the same function into the task scheduler. No gocron dependency in 1.2.
-6. **Disk name masking is a UI preference** — stored client-side (Zustand + `localStorage`); API always returns full disk data; the frontend hides identifiers when the toggle is on. No new PostgreSQL column or user-settings table in 1.2.
+6. **Disk name masking is an admin security setting** — stored server-side in PostgreSQL (`instance_settings.mask_disk_names`); the API masks disk paths and labels for all users when enabled, except on `GET /api/disks` for administrators (volume creation). Configured in **Settings** (`/settings`).
 7. **Search is volume-scoped** — Bleve index is per-volume; search UI lives on the monitoring page with a volume selector (UC2.4). No cross-volume search in MVP.
 8. **MIME groups match macro vocabulary** — breakdown categories align with Phase 1.4 `sort_by_type` folders: `images`, `documents`, `videos`, `audio`, `archives`, `other`.
 9. **Admin sees all volumes/disks** — same owner-scoping rules as Phase 1.1; monitoring endpoints respect volume ownership.
@@ -36,7 +36,7 @@ Give users visibility into their storage: space usage per volume and per disk, f
 |---|---|
 | UC2.1 | As a user, I open the monitoring dashboard and see my "Photos" volume at 12 GB / 50 GB with images at 100% of volume content. |
 | UC2.2 | As a user, I add a "Documents" volume on a second disk — both volumes appear in the unified list grouped by disk. |
-| UC2.3 | As a user, I enable disk name masking — the UI shows available space only, not disk paths or labels. |
+| UC2.3 | As an admin, I enable disk name masking in Settings — non-admin users see generic labels (e.g. "Storage 1") instead of real disk paths across the app. |
 | UC2.4 | As a user, I search "vacation" in my Photos volume — matching filenames appear from the Bleve index. |
 
 **Out of scope for Phase 1.2:**
@@ -62,7 +62,7 @@ Phase 1.2 adds no new dependencies. Reuses:
 | Layer | Reuse |
 |---|---|
 | Backend | Bleve v2 (`VolumeIndexer.Search` extended), existing `DiskRegistry`, `MetadataCache` |
-| Frontend | TanStack Query, Zustand (display preferences), shadcn/ui chart primitives or CSS progress bars |
+| Frontend | TanStack Query, Settings page (admin security options), shadcn/ui chart primitives or CSS progress bars |
 
 ---
 
@@ -156,7 +156,7 @@ lcloud/
 │   │   ├── useVolumeStats.ts
 │   │   └── useVolumeSearch.ts
 │   ├── store/
-│   │   └── displayPreferences.ts   ← maskDiskNames toggle (localStorage)
+│   │   └── useSettings.ts          ← instance settings (mask_disk_names)
 │   └── lib/api.ts                  ← monitoring + search methods
 ```
 
@@ -443,7 +443,7 @@ Remove "Soon" badge from Monitoring sidebar item when Phase 1.2 ships.
 **Header row:**
 
 - Page title: **Monitoring**
-- **Disk mask toggle** — "Hide disk names" switch; persisted in `displayPreferences` store (localStorage key: `lcloud.maskDiskNames`)
+- **Settings page** — admin toggle "Hide disk names"; persisted via `PATCH /api/admin/settings`
 
 **Section 1 — Disk overview (top cards):**
 
@@ -472,16 +472,23 @@ Remove "Soon" badge from Monitoring sidebar item when Phase 1.2 ships.
 - Results table: name, path, size, modified, thumbnail if image.
 - Empty state when no matches.
 
-### Disk masking behavior (client-only)
+### Disk masking behavior (server-enforced)
 
-| Element | Mask off | Mask on |
+| Element | Mask off | Mask on (non-admin) |
 |---|---|---|
 | Disk card title | Label ("SSD") | "Storage 1" (ordered by API response index) |
-| Disk path | Hidden (never shown in UI) | Hidden |
+| Disk path / name | Shown where relevant | Hidden (API returns empty path, generic label) |
 | Volume list disk column | Label | Hidden |
-| `VolumeCard` on `/volumes` | Unchanged (disk shown) | Out of scope — masking applies to monitoring page only |
+| `VolumeCard` on `/volumes` | Disk path shown | Disk path hidden |
+| Admin user | Real paths in volume creation only | Masked everywhere else |
 
-Masking is monitoring-page-only in Phase 1.2 to keep scope minimal. Extending to `/volumes` is a follow-up if needed.
+Configured in **Settings** (`PATCH /api/admin/settings`). Toggle removed from Monitoring page header.
+
+### Settings page (minimal Phase 1.2 scope)
+
+- `/settings` replaces Phase 0 placeholder for this security option only.
+- Admin: toggle "Hide disk names" with security explanation.
+- Non-admin: read-only status ("Disk names are hidden/visible").
 
 ### Data fetching
 
@@ -572,7 +579,7 @@ cd web && npm run test
 ### Ask first
 
 - Adding chart libraries not already in the frontend stack.
-- Persisting disk mask preference server-side (would need user preferences model + ADR).
+- Per-user display preferences beyond instance-wide admin settings.
 - Cross-volume search (architectural scope change).
 - Changing `stats.json` location or schema after Phase 1.2 ships (requires ADR).
 
@@ -602,7 +609,7 @@ Phase 1.2 is **done** when all of the following pass:
 - [ ] **SC2.10** Empty search term with filters only returns filter-matched files
 - [ ] **SC2.11** UI: monitoring dashboard shows real data from live volume (UC2.1)
 - [ ] **SC2.12** UI: multi-disk unified volume list (UC2.2)
-- [ ] **SC2.13** UI: disk name masking toggle hides disk identifiers, shows space only (UC2.3)
+- [ ] **SC2.13** Admin can enable disk name masking in Settings; non-admins see masked disk identifiers app-wide (UC2.3)
 - [ ] **SC2.14** UI: volume search finds "vacation" matches (UC2.4)
 - [ ] **SC2.15** Monitoring sidebar item active without "Soon" badge
 - [ ] **SC2.16** `ComputeStats` callable from monitoring service (documented for Phase 1.4 integration)
@@ -622,7 +629,7 @@ Suggested vertical slices — `/plan` will expand into `tasks/plan.md`:
 6. **Extend SearchQuery + Bleve filters** — indexer changes + tests
 7. **Monitoring API handlers** — overview, stats, refresh
 8. **Search API handler** — volume search endpoint
-9. **Frontend display preferences** — Zustand store for disk mask toggle
+9. **Settings page + API** — `internal/settings/`, admin toggle for disk masking
 10. **Frontend monitoring page** — disk cards, unified list, stats panel
 11. **Frontend search panel** — volume selector, filters, results
 12. **Integration** — Docker end-to-end UC2.1–UC2.4
@@ -635,7 +642,7 @@ Suggested vertical slices — `/plan` will expand into `tasks/plan.md`:
 |---|---|---|
 | D1 | Stats cached in `cache/metadata/stats.json` per volume | ✅ Proposed |
 | D2 | MIME categories align with `sort_by_type` macro folders | ✅ Proposed |
-| D3 | Disk masking = client-side localStorage, monitoring page only | ✅ Proposed |
+| D3 | Disk masking = admin setting in Settings, server-side enforcement for all display APIs | ✅ Shipped |
 | D4 | Search UI on monitoring page with volume selector | ✅ Proposed |
 | D5 | `ComputeStats` shared with Phase 1.4 `compute_stats` macro | ✅ Proposed |
 | D6 | Lazy stats compute on read if cache missing | ✅ Proposed |
@@ -648,7 +655,7 @@ Suggested vertical slices — `/plan` will expand into `tasks/plan.md`:
 | # | Question | Status |
 |---|---|---|
 | OQ1 | **Chart library for MIME breakdown** — see below | ⏳ Pending |
-| OQ2 | **Mask toggle scope** — monitoring page only vs also `/volumes` | ⏳ Pending (recommendation: monitoring only) |
+| OQ2 | **Mask toggle scope** — app-wide via API (resolved) | ✅ Resolved |
 | OQ3 | **Search result actions** — see below | ⏳ Pending |
 
 ### OQ1 — Chart library (plain language)

@@ -152,6 +152,10 @@ export interface GlobalSearchResponse {
   results: GlobalSearchResultItem[];
 }
 
+export interface InstanceSettings {
+  mask_disk_names: boolean;
+}
+
 export interface LoginResponse {
   access_token: string;
   refresh_token: string;
@@ -378,6 +382,15 @@ export const api = {
   searchAllFiles(params: SearchParams = {}) {
     const query = buildSearchQuery(params);
     return apiRequest<GlobalSearchResponse>(`/api/search${query ? `?${query}` : ""}`);
+  },
+  getSettings() {
+    return apiRequest<InstanceSettings>("/api/settings");
+  },
+  patchAdminSettings(input: { mask_disk_names: boolean }) {
+    return apiRequest<InstanceSettings>("/api/admin/settings", {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    });
   },
 };
 

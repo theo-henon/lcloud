@@ -33,7 +33,7 @@ func setupMonitoringTest(t *testing.T) (*Service, *volume.Service, *volume.FileS
 
 	indexManager := indexer.NewIndexManager()
 	volumeService := volume.NewService(db, volume.NewDiskRegistry(cfg), indexManager)
-	monitoringService := NewService(volumeService, volume.NewDiskRegistry(cfg))
+	monitoringService := NewService(volumeService, volume.NewDiskRegistry(cfg), nil)
 	fileService := volume.NewFileService(volumeService, indexManager, cfg.MaxUploadBytes, monitoringService.StatsCache())
 	claims := &auth.Claims{UserID: uuid.New(), Role: auth.RoleUser}
 

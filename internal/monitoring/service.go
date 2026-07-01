@@ -15,14 +15,20 @@ type Service struct {
 	disks    *volume.DiskRegistry
 	metadata *volume.MetadataCache
 	cache    *StatsCache
+	settings SettingsReader
 }
 
-func NewService(volumes *volume.Service, disks *volume.DiskRegistry) *Service {
+type SettingsReader interface {
+	ShouldMaskFor(claims *auth.Claims) (bool, error)
+}
+
+func NewService(volumes *volume.Service, disks *volume.DiskRegistry, settings SettingsReader) *Service {
 	return &Service{
 		volumes:  volumes,
 		disks:    disks,
 		metadata: volume.NewMetadataCache(),
 		cache:    NewStatsCache(),
+		settings: settings,
 	}
 }
 
@@ -66,6 +72,23 @@ func (s *Service) GetOverview(ctx context.Context, claims *auth.Claims) (*Overvi
 			return nil, err
 		}
 		summaries = append(summaries, *summary)
+	}
+
+	maskDiskNames := false
+	if s.settings != nil {
+		maskDiskNames, err = s.settings.ShouldMaskFor(claims)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if maskDiskNames {
+		for i := range diskOverviews {
+			diskOverviews[i] = maskOverviewDisk(diskOverviews[i], i)
+		}
+		for i := range summaries {
+			summaries[i].DiskPath = ""
+		}
 	}
 
 	return &OverviewResponse{

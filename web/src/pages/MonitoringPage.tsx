@@ -1,16 +1,13 @@
 import { useEffect, useState } from "react";
 import { Header } from "@/components/layout/Header";
-import { DiskMaskToggle } from "@/components/monitoring/DiskMaskToggle";
 import { DiskOverviewCard } from "@/components/monitoring/DiskOverviewCard";
 import { UnifiedVolumeList } from "@/components/monitoring/UnifiedVolumeList";
 import { VolumeStatsPanel } from "@/components/monitoring/VolumeStatsPanel";
 import { Card } from "@/components/ui/card";
 import { useMonitoringOverview } from "@/hooks/useMonitoringOverview";
 import { useRefreshVolumeStats, useVolumeStats } from "@/hooks/useVolumeStats";
-import { useDisplayPreferences } from "@/store/displayPreferences";
 
 export function MonitoringPage() {
-  const maskDiskNames = useDisplayPreferences((state) => state.maskDiskNames);
   const overviewQuery = useMonitoringOverview();
   const [selectedVolumeId, setSelectedVolumeId] = useState<string | undefined>();
 
@@ -30,7 +27,6 @@ export function MonitoringPage() {
         <Header
           title="Monitoring"
           description="Track space usage and file breakdown across disks."
-          action={<DiskMaskToggle />}
         />
         <section className="px-8 py-6">
           <p className="text-sm text-muted">Loading monitoring data...</p>
@@ -52,7 +48,6 @@ export function MonitoringPage() {
       <Header
         title="Monitoring"
         description="Track space usage and file breakdown across disks."
-        action={<DiskMaskToggle />}
       />
 
       <section className="space-y-8 px-8 py-6">
@@ -63,10 +58,9 @@ export function MonitoringPage() {
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {overview.disks.map((disk, index) => (
               <DiskOverviewCard
-                key={disk.path}
+                key={disk.path || disk.name}
                 disk={disk}
                 index={index}
-                maskDiskNames={maskDiskNames}
               />
             ))}
           </div>
@@ -80,7 +74,6 @@ export function MonitoringPage() {
             volumes={overview.volumes}
             disks={overview.disks}
             selectedId={selectedVolumeId}
-            maskDiskNames={maskDiskNames}
             onSelect={setSelectedVolumeId}
           />
         </div>
@@ -93,7 +86,6 @@ export function MonitoringPage() {
             void refreshStats.mutateAsync();
           }}
         />
-
       </section>
     </>
   );

@@ -1,20 +1,14 @@
-import type { VolumeSummary } from "@/lib/api";
+import type { DiskOverview, VolumeSummary } from "@/lib/api";
 import { formatBytes } from "@/lib/utils";
 
 type UnifiedVolumeListProps = {
   volumes: VolumeSummary[];
-  disks: { path: string; label: string }[];
+  disks: DiskOverview[];
   selectedId?: string;
-  maskDiskNames: boolean;
   onSelect: (volumeId: string) => void;
 };
 
-function diskLabel(
-  diskPath: string,
-  disks: { path: string; label: string }[],
-  maskDiskNames: boolean,
-): string {
-  if (maskDiskNames) return "—";
+function diskLabel(diskPath: string, disks: DiskOverview[]): string {
   const disk = disks.find((item) => item.path === diskPath);
   return disk?.label ?? diskPath;
 }
@@ -23,9 +17,10 @@ export function UnifiedVolumeList({
   volumes,
   disks,
   selectedId,
-  maskDiskNames,
   onSelect,
 }: UnifiedVolumeListProps) {
+  const showDiskColumn = volumes.some((volume) => volume.disk_path !== "");
+
   if (volumes.length === 0) {
     return <p className="text-sm text-muted">No volumes yet.</p>;
   }
@@ -39,7 +34,7 @@ export function UnifiedVolumeList({
             <th className="px-4 py-3 font-medium">Usage</th>
             <th className="px-4 py-3 font-medium">Files</th>
             <th className="px-4 py-3 font-medium">Top type</th>
-            {!maskDiskNames ? <th className="px-4 py-3 font-medium">Disk</th> : null}
+            {showDiskColumn ? <th className="px-4 py-3 font-medium">Disk</th> : null}
           </tr>
         </thead>
         <tbody>
@@ -80,9 +75,9 @@ export function UnifiedVolumeList({
                 <td className="px-4 py-3 capitalize text-body">
                   {volume.top_category ?? "—"}
                 </td>
-                {!maskDiskNames ? (
+                {showDiskColumn ? (
                   <td className="px-4 py-3 text-muted">
-                    {diskLabel(volume.disk_path, disks, maskDiskNames)}
+                    {diskLabel(volume.disk_path, disks)}
                   </td>
                 ) : null}
               </tr>

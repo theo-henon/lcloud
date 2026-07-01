@@ -26,7 +26,9 @@ export function VolumeCard({ volume, isAdmin, onRename, onDelete }: VolumeCardPr
     <Card className="flex flex-col gap-4 p-5">
       <div>
         <h3 className="text-lg font-semibold text-ink">{volume.name}</h3>
-        <p className="mt-1 text-sm text-muted">{volume.disk_path}</p>
+        {volume.disk_path ? (
+          <p className="mt-1 text-sm text-muted">{volume.disk_path}</p>
+        ) : null}
       </div>
 
       <div className="space-y-1 text-sm text-body">
