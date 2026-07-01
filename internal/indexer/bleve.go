@@ -4,10 +4,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/blevesearch/bleve/v2"
 	"github.com/blevesearch/bleve/v2/mapping"
+	blevequery "github.com/blevesearch/bleve/v2/search/query"
 )
 
 type BleveIndexer struct {
@@ -38,8 +41,13 @@ func OpenBleveIndexer(volumeRoot string) (*BleveIndexer, error) {
 
 func newFileMapping() *mapping.DocumentMapping {
 	doc := bleve.NewDocumentMapping()
-	for _, field := range []string{"name", "relative_path", "mime_type", "sha256"} {
+	for _, field := range []string{"name", "relative_path"} {
 		fieldMapping := bleve.NewTextFieldMapping()
+		fieldMapping.Store = true
+		doc.AddFieldMappingsAt(field, fieldMapping)
+	}
+	for _, field := range []string{"mime_type", "sha256"} {
+		fieldMapping := bleve.NewKeywordFieldMapping()
 		fieldMapping.Store = true
 		doc.AddFieldMappingsAt(field, fieldMapping)
 	}
@@ -74,13 +82,72 @@ func (b *BleveIndexer) Delete(path string) error {
 	return b.index.Delete(path)
 }
 
-func (b *BleveIndexer) Search(query SearchQuery) ([]FileMetadata, error) {
+func (b *BleveIndexer) Search(searchQuery SearchQuery) ([]FileMetadata, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	search := bleve.NewMatchQuery(query.Term)
-	searchRequest := bleve.NewSearchRequest(search)
+	limit := searchQuery.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	queries := make([]blevequery.Query, 0, 6)
+	if term := strings.TrimSpace(searchQuery.Term); term != "" {
+		nameQuery := bleve.NewWildcardQuery("*" + term + "*")
+		nameQuery.SetField("name")
+		pathQuery := bleve.NewWildcardQuery("*" + term + "*")
+		pathQuery.SetField("relative_path")
+		queries = append(queries, bleve.NewDisjunctionQuery(nameQuery, pathQuery))
+	}
+	if prefix := strings.TrimSpace(searchQuery.MimePrefix); prefix != "" {
+		prefixQuery := bleve.NewPrefixQuery(prefix)
+		prefixQuery.SetField("mime_type")
+		queries = append(queries, prefixQuery)
+	}
+	if searchQuery.MinSizeBytes != nil || searchQuery.MaxSizeBytes != nil {
+		var min, max *float64
+		if searchQuery.MinSizeBytes != nil {
+			v := float64(*searchQuery.MinSizeBytes)
+			min = &v
+		}
+		if searchQuery.MaxSizeBytes != nil {
+			v := float64(*searchQuery.MaxSizeBytes)
+			max = &v
+		}
+		rangeQuery := bleve.NewNumericRangeQuery(min, max)
+		rangeQuery.SetField("size_bytes")
+		queries = append(queries, rangeQuery)
+	}
+	if searchQuery.ModifiedAfter != nil || searchQuery.ModifiedBefore != nil {
+		start := time.Time{}
+		end := time.Time{}
+		if searchQuery.ModifiedAfter != nil {
+			start = *searchQuery.ModifiedAfter
+		}
+		if searchQuery.ModifiedBefore != nil {
+			end = *searchQuery.ModifiedBefore
+		}
+		dateQuery := bleve.NewDateRangeQuery(start, end)
+		dateQuery.SetField("modified_at")
+		queries = append(queries, dateQuery)
+	}
+
+	var bleveQuery blevequery.Query
+	switch len(queries) {
+	case 0:
+		bleveQuery = bleve.NewMatchAllQuery()
+	case 1:
+		bleveQuery = queries[0]
+	default:
+		bleveQuery = bleve.NewConjunctionQuery(queries...)
+	}
+
+	searchRequest := bleve.NewSearchRequest(bleveQuery)
 	searchRequest.Fields = []string{"*"}
+	searchRequest.Size = limit
 	result, err := b.index.Search(searchRequest)
 	if err != nil {
 		return nil, err
@@ -128,7 +195,7 @@ func (b *BleveIndexer) Close() error {
 }
 
 func fieldsToMetadata(id string, fields map[string]any) FileMetadata {
-	meta := FileMetadata{RelativePath: id}
+	meta := FileMetadata{RelativePath: id, ID: id}
 	if value, ok := fields["name"].(string); ok {
 		meta.Name = value
 	}
@@ -140,6 +207,11 @@ func fieldsToMetadata(id string, fields map[string]any) FileMetadata {
 	}
 	if value, ok := fields["size_bytes"].(float64); ok {
 		meta.SizeBytes = int64(value)
+	}
+	if value, ok := fields["modified_at"].(string); ok {
+		if parsed, err := time.Parse(time.RFC3339Nano, value); err == nil {
+			meta.ModifiedAt = parsed
+		}
 	}
 	return meta
 }

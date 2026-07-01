@@ -10,6 +10,8 @@ import (
 	"github.com/theo-henon/lcloud/internal/auth"
 	"github.com/theo-henon/lcloud/internal/config"
 	"github.com/theo-henon/lcloud/internal/indexer"
+	"github.com/theo-henon/lcloud/internal/monitoring"
+	"github.com/theo-henon/lcloud/internal/settings"
 	"github.com/theo-henon/lcloud/internal/volume"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -29,7 +31,7 @@ func main() {
 		log.Fatalf("database: %v", err)
 	}
 
-	if err := db.AutoMigrate(&auth.User{}, &auth.RefreshToken{}, &volume.Volume{}); err != nil {
+	if err := db.AutoMigrate(&auth.User{}, &auth.RefreshToken{}, &volume.Volume{}, &settings.InstanceSettings{}); err != nil {
 		log.Fatalf("migrate: %v", err)
 	}
 
@@ -38,10 +40,16 @@ func main() {
 		log.Fatalf("seed admin: %v", err)
 	}
 
+	settingsService := settings.NewService(db)
+	if err := settingsService.EnsureDefaults(); err != nil {
+		log.Fatalf("settings defaults: %v", err)
+	}
+
 	diskRegistry := volume.NewDiskRegistry(cfg)
 	indexManager := indexer.NewIndexManager()
 	volumeService := volume.NewService(db, diskRegistry, indexManager)
-	fileService := volume.NewFileService(volumeService, indexManager, cfg.MaxUploadBytes)
+	monitoringService := monitoring.NewService(volumeService, diskRegistry, settingsService)
+	fileService := volume.NewFileService(volumeService, indexManager, cfg.MaxUploadBytes, monitoringService.StatsCache())
 
 	staticFS, err := fs.Sub(staticEmbed, "static")
 	if err != nil {
@@ -49,13 +57,16 @@ func main() {
 	}
 
 	router := api.NewRouter(api.RouterConfig{
-		AuthService:    authService,
-		DiskRegistry:   diskRegistry,
-		VolumeService:  volumeService,
-		FileService:    fileService,
-		MaxUploadBytes: cfg.MaxUploadBytes,
-		StaticFS:       staticFS,
-		GinMode:        cfg.GinMode,
+		AuthService:       authService,
+		DiskRegistry:      diskRegistry,
+		VolumeService:     volumeService,
+		FileService:       fileService,
+		MonitoringService: monitoringService,
+		SettingsService:   settingsService,
+		IndexManager:      indexManager,
+		MaxUploadBytes:    cfg.MaxUploadBytes,
+		StaticFS:          staticFS,
+		GinMode:           cfg.GinMode,
 	})
 
 	addr := ":" + cfg.AppPort

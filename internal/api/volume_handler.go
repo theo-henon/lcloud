@@ -7,16 +7,18 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/theo-henon/lcloud/internal/auth"
+	"github.com/theo-henon/lcloud/internal/settings"
 	"github.com/theo-henon/lcloud/internal/volume"
 	"github.com/theo-henon/lcloud/pkg/httputil"
 )
 
 type VolumeHandler struct {
-	volumes *volume.Service
+	volumes  *volume.Service
+	settings *settings.Service
 }
 
-func NewVolumeHandler(volumes *volume.Service) *VolumeHandler {
-	return &VolumeHandler{volumes: volumes}
+func NewVolumeHandler(volumes *volume.Service, settingsService *settings.Service) *VolumeHandler {
+	return &VolumeHandler{volumes: volumes, settings: settingsService}
 }
 
 type createVolumeRequest struct {
@@ -44,6 +46,14 @@ func (h *VolumeHandler) List(c *gin.Context) {
 		httputil.InternalError(c, "unable to list volumes")
 		return
 	}
+	for i := range volumes {
+		masked, err := h.maskVolumeIfNeeded(claims, volumes[i])
+		if err != nil {
+			httputil.InternalError(c, "unable to load settings")
+			return
+		}
+		volumes[i] = masked
+	}
 	httputil.JSON(c, http.StatusOK, gin.H{"volumes": volumes})
 }
 
@@ -70,7 +80,12 @@ func (h *VolumeHandler) Create(c *gin.Context) {
 		mapVolumeError(c, err)
 		return
 	}
-	httputil.JSON(c, http.StatusCreated, vol)
+	masked, err := h.maskVolumeIfNeeded(claims, *vol)
+	if err != nil {
+		httputil.InternalError(c, "unable to load settings")
+		return
+	}
+	httputil.JSON(c, http.StatusCreated, masked)
 }
 
 func (h *VolumeHandler) Get(c *gin.Context) {
@@ -91,7 +106,12 @@ func (h *VolumeHandler) Get(c *gin.Context) {
 		mapVolumeError(c, err)
 		return
 	}
-	httputil.JSON(c, http.StatusOK, vol)
+	masked, err := h.maskVolumeIfNeeded(claims, *vol)
+	if err != nil {
+		httputil.InternalError(c, "unable to load settings")
+		return
+	}
+	httputil.JSON(c, http.StatusOK, masked)
 }
 
 func (h *VolumeHandler) Patch(c *gin.Context) {
@@ -122,7 +142,12 @@ func (h *VolumeHandler) Patch(c *gin.Context) {
 		mapVolumeError(c, err)
 		return
 	}
-	httputil.JSON(c, http.StatusOK, vol)
+	masked, err := h.maskVolumeIfNeeded(claims, *vol)
+	if err != nil {
+		httputil.InternalError(c, "unable to load settings")
+		return
+	}
+	httputil.JSON(c, http.StatusOK, masked)
 }
 
 func (h *VolumeHandler) Delete(c *gin.Context) {
@@ -163,4 +188,15 @@ func mapVolumeError(c *gin.Context, err error) {
 	default:
 		httputil.InternalError(c, "volume operation failed")
 	}
+}
+
+func (h *VolumeHandler) maskVolumeIfNeeded(claims *auth.Claims, vol volume.Volume) (volume.Volume, error) {
+	mask, err := h.settings.ShouldMaskFor(claims)
+	if err != nil {
+		return volume.Volume{}, err
+	}
+	if mask {
+		return maskVolume(vol), nil
+	}
+	return vol, nil
 }

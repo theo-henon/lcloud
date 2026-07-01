@@ -18,6 +18,8 @@ type FileMetadataRecord struct {
 	ThumbnailPath string    `json:"thumbnail_path,omitempty"`
 }
 
+const StatsCacheFile = "stats.json"
+
 type MetadataCache struct{}
 
 func NewMetadataCache() *MetadataCache {
@@ -97,4 +99,35 @@ func (c *MetadataCache) DeleteByRelativePath(rootPath, relPath string) error {
 		return err
 	}
 	return c.Delete(rootPath, record.ID)
+}
+
+func (c *MetadataCache) ListAll(rootPath string) ([]FileMetadataRecord, error) {
+	dir := c.metadataDir(rootPath)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []FileMetadataRecord{}, nil
+		}
+		return nil, err
+	}
+
+	records := make([]FileMetadataRecord, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || entry.Name() == StatsCacheFile {
+			continue
+		}
+		if filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		if err != nil {
+			continue
+		}
+		var record FileMetadataRecord
+		if err := json.Unmarshal(data, &record); err != nil {
+			continue
+		}
+		records = append(records, record)
+	}
+	return records, nil
 }

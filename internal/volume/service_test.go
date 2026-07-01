@@ -31,7 +31,7 @@ func setupVolumeTest(t *testing.T) (*Service, *FileService, *auth.Claims, string
 
 	indexManager := indexer.NewIndexManager()
 	service := NewService(db, NewDiskRegistry(cfg), indexManager)
-	files := NewFileService(service, indexManager, cfg.MaxUploadBytes)
+	files := NewFileService(service, indexManager, cfg.MaxUploadBytes, nil)
 	claims := &auth.Claims{UserID: uuid.New(), Role: auth.RoleUser}
 
 	return service, files, claims, storageRoot
