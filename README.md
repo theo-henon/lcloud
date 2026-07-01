@@ -25,7 +25,7 @@ A self-hosted, open-source, and extensible cloud storage platform. Deploy it on 
 
 ### Installation
 ```bash
-git clone https://github.com/<username>/lcloud
+git clone https://github.com/theo-henon/lcloud
 cd lcloud
 cp .env.example .env
 ```
@@ -44,7 +44,15 @@ STORAGE_BASE_PATH=
 
 ### Launch
 ```bash
-docker compose up -d
+make embed          # build frontend and embed into Go binary
+docker compose up -d --build
+```
+
+Or without Make:
+```bash
+cd web && npm install && npm run build
+cp -R web/dist/. cmd/server/static/
+docker compose up -d --build
 ```
 
 App accessible on http://localhost:8080.
@@ -52,6 +60,12 @@ App accessible on http://localhost:8080.
 For frontend development:
 ```bash
 cd web && npm install && npm run dev
+```
+
+To run the Go server locally with the embedded UI:
+```bash
+make embed
+go run ./cmd/server
 ```
 
 ---
