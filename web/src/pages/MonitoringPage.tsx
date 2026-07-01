@@ -3,7 +3,6 @@ import { Header } from "@/components/layout/Header";
 import { DiskMaskToggle } from "@/components/monitoring/DiskMaskToggle";
 import { DiskOverviewCard } from "@/components/monitoring/DiskOverviewCard";
 import { UnifiedVolumeList } from "@/components/monitoring/UnifiedVolumeList";
-import { VolumeSearchPanel } from "@/components/monitoring/VolumeSearchPanel";
 import { VolumeStatsPanel } from "@/components/monitoring/VolumeStatsPanel";
 import { Card } from "@/components/ui/card";
 import { useMonitoringOverview } from "@/hooks/useMonitoringOverview";
@@ -26,7 +25,18 @@ export function MonitoringPage() {
   }, [overview, selectedVolumeId]);
 
   if (overviewQuery.isLoading) {
-    return <div className="px-8 py-6 text-sm text-muted">Loading monitoring data...</div>;
+    return (
+      <>
+        <Header
+          title="Monitoring"
+          description="Track space usage and file breakdown across disks."
+          action={<DiskMaskToggle />}
+        />
+        <section className="px-8 py-6">
+          <p className="text-sm text-muted">Loading monitoring data...</p>
+        </section>
+      </>
+    );
   }
 
   if (overviewQuery.isError || !overview) {
@@ -84,9 +94,6 @@ export function MonitoringPage() {
           }}
         />
 
-        {overview.volumes.length > 0 ? (
-          <VolumeSearchPanel volumes={overview.volumes} />
-        ) : null}
       </section>
     </>
   );

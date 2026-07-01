@@ -204,6 +204,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		protected := api.Group("", auth.AuthMiddleware(cfg.AuthService))
 		{
 			protected.GET("/disks", diskHandler.List)
+			protected.GET("/search", searchHandler.SearchAll)
 
 			protected.GET("/volumes", volumeHandler.List)
 			protected.POST("/volumes", volumeHandler.Create)

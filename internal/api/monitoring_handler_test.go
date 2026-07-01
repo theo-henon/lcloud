@@ -125,6 +125,24 @@ func TestMonitoringVolumeStatsAndSearch(t *testing.T) {
 	require.NoError(t, json.Unmarshal(searchRec.Body.Bytes(), &searchResp))
 	require.Equal(t, 1, searchResp.Total)
 	require.Equal(t, "vacation.png", searchResp.Results[0].Name)
+
+	globalSearchReq := httptest.NewRequest(http.MethodGet, "/api/search?q=vacation", nil)
+	globalSearchReq.Header.Set("Authorization", "Bearer "+token)
+	globalSearchRec := httptest.NewRecorder()
+	router.ServeHTTP(globalSearchRec, globalSearchReq)
+	require.Equal(t, http.StatusOK, globalSearchRec.Code)
+
+	var globalSearchResp struct {
+		Total   int `json:"total"`
+		Results []struct {
+			Name       string `json:"name"`
+			VolumeName string `json:"volume_name"`
+		} `json:"results"`
+	}
+	require.NoError(t, json.Unmarshal(globalSearchRec.Body.Bytes(), &globalSearchResp))
+	require.Equal(t, 1, globalSearchResp.Total)
+	require.Equal(t, "vacation.png", globalSearchResp.Results[0].Name)
+	require.Equal(t, "Photos", globalSearchResp.Results[0].VolumeName)
 }
 
 func TestMonitoringForbiddenForOtherUserVolume(t *testing.T) {

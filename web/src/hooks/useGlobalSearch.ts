@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { api, type SearchParams } from "@/lib/api";
 
-export function useVolumeSearch(volumeId: string | undefined, params: SearchParams) {
+export function useGlobalSearch(params: SearchParams, enabled = true) {
   const [debouncedQ, setDebouncedQ] = useState(params.q ?? "");
 
   useEffect(() => {
@@ -19,12 +19,12 @@ export function useVolumeSearch(volumeId: string | undefined, params: SearchPara
     Boolean(params.modified_before);
 
   return useQuery({
-    queryKey: ["search", volumeId, debouncedQ, params],
+    queryKey: ["search", "global", debouncedQ, params],
     queryFn: () =>
-      api.searchVolumeFiles(volumeId!, {
+      api.searchAllFiles({
         ...params,
         q: debouncedQ || undefined,
       }),
-    enabled: Boolean(volumeId) && hasFilters,
+    enabled: enabled && hasFilters,
   });
 }

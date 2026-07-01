@@ -125,6 +125,11 @@ export interface SearchResultItem {
   has_thumbnail: boolean;
 }
 
+export interface GlobalSearchResultItem extends SearchResultItem {
+  volume_id: string;
+  volume_name: string;
+}
+
 export interface SearchParams {
   q?: string;
   mime_prefix?: string;
@@ -139,6 +144,12 @@ export interface SearchResponse {
   query: Record<string, unknown>;
   total: number;
   results: SearchResultItem[];
+}
+
+export interface GlobalSearchResponse {
+  query: Record<string, unknown>;
+  total: number;
+  results: GlobalSearchResultItem[];
 }
 
 export interface LoginResponse {
@@ -359,17 +370,25 @@ export const api = {
     });
   },
   searchVolumeFiles(volumeId: string, params: SearchParams = {}) {
-    const search = new URLSearchParams();
-    if (params.q) search.set("q", params.q);
-    if (params.mime_prefix) search.set("mime_prefix", params.mime_prefix);
-    if (params.min_size != null) search.set("min_size", String(params.min_size));
-    if (params.max_size != null) search.set("max_size", String(params.max_size));
-    if (params.modified_after) search.set("modified_after", params.modified_after);
-    if (params.modified_before) search.set("modified_before", params.modified_before);
-    if (params.limit != null) search.set("limit", String(params.limit));
-    const query = search.toString();
+    const query = buildSearchQuery(params);
     return apiRequest<SearchResponse>(
       `/api/volumes/${volumeId}/search${query ? `?${query}` : ""}`,
     );
   },
+  searchAllFiles(params: SearchParams = {}) {
+    const query = buildSearchQuery(params);
+    return apiRequest<GlobalSearchResponse>(`/api/search${query ? `?${query}` : ""}`);
+  },
 };
+
+function buildSearchQuery(params: SearchParams): string {
+  const search = new URLSearchParams();
+  if (params.q) search.set("q", params.q);
+  if (params.mime_prefix) search.set("mime_prefix", params.mime_prefix);
+  if (params.min_size != null) search.set("min_size", String(params.min_size));
+  if (params.max_size != null) search.set("max_size", String(params.max_size));
+  if (params.modified_after) search.set("modified_after", params.modified_after);
+  if (params.modified_before) search.set("modified_before", params.modified_before);
+  if (params.limit != null) search.set("limit", String(params.limit));
+  return search.toString();
+}

@@ -1,4 +1,5 @@
 import { NavLink } from "react-router-dom";
+import { GlobalSearch } from "@/components/layout/GlobalSearch";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -55,6 +56,8 @@ export function Sidebar() {
         </div>
         <div className="mt-1 text-lg font-bold text-ink">Control panel</div>
       </div>
+
+      <GlobalSearch />
 
       <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-4">
         {navGroups.map((group) => {

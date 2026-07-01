@@ -30,18 +30,35 @@ func NewSearchHandler(volumes *volume.Service, indexManager *indexer.IndexManage
 }
 
 type searchResultItem struct {
-	Name          string    `json:"name"`
-	RelativePath  string    `json:"relative_path"`
-	MimeType      string    `json:"mime_type"`
-	SizeBytes     int64     `json:"size_bytes"`
-	ModifiedAt    time.Time `json:"modified_at"`
-	HasThumbnail  bool      `json:"has_thumbnail"`
+	Name         string    `json:"name"`
+	RelativePath string    `json:"relative_path"`
+	MimeType     string    `json:"mime_type"`
+	SizeBytes    int64     `json:"size_bytes"`
+	ModifiedAt   time.Time `json:"modified_at"`
+	HasThumbnail bool      `json:"has_thumbnail"`
+}
+
+type globalSearchResultItem struct {
+	VolumeID     string    `json:"volume_id"`
+	VolumeName   string    `json:"volume_name"`
+	Name         string    `json:"name"`
+	RelativePath string    `json:"relative_path"`
+	MimeType     string    `json:"mime_type"`
+	SizeBytes    int64     `json:"size_bytes"`
+	ModifiedAt   time.Time `json:"modified_at"`
+	HasThumbnail bool      `json:"has_thumbnail"`
 }
 
 type searchResponse struct {
 	Query   map[string]any     `json:"query"`
 	Total   int                `json:"total"`
 	Results []searchResultItem `json:"results"`
+}
+
+type globalSearchResponse struct {
+	Query   map[string]any           `json:"query"`
+	Total   int                      `json:"total"`
+	Results []globalSearchResultItem `json:"results"`
 }
 
 func (h *SearchHandler) Search(c *gin.Context) {
@@ -77,20 +94,107 @@ func (h *SearchHandler) Search(c *gin.Context) {
 		return
 	}
 
-	idx, err := h.indexManager.Get(vol.RootPath)
+	items, err := h.searchVolume(vol, query)
 	if err != nil {
-		httputil.Unprocessable(c, "INDEX_UNAVAILABLE", "search index unavailable")
-		return
-	}
-
-	results, err := idx.Search(query)
-	if err != nil {
+		if errors.Is(err, errIndexUnavailable) {
+			httputil.Unprocessable(c, "INDEX_UNAVAILABLE", "search index unavailable")
+			return
+		}
 		httputil.InternalError(c, "unable to search volume")
 		return
 	}
 
-	items := make([]searchResultItem, 0, len(results))
-	for _, result := range results {
+	httputil.JSON(c, http.StatusOK, searchResponse{
+		Query:   queryMeta,
+		Total:   len(items),
+		Results: items,
+	})
+}
+
+func (h *SearchHandler) SearchAll(c *gin.Context) {
+	claims, ok := auth.ClaimsFromContext(c)
+	if !ok {
+		httputil.Unauthorized(c, "unauthorized")
+		return
+	}
+
+	volumes, err := h.volumes.List(claims)
+	if err != nil {
+		httputil.InternalError(c, "unable to list volumes")
+		return
+	}
+
+	query, queryMeta, err := parseSearchQuery(c)
+	if err != nil {
+		httputil.Unprocessable(c, "INVALID_SEARCH_QUERY", err.Error())
+		return
+	}
+
+	globalLimit := query.Limit
+	if globalLimit <= 0 {
+		globalLimit = 50
+	}
+	if globalLimit > 200 {
+		globalLimit = 200
+	}
+
+	results := make([]globalSearchResultItem, 0, globalLimit)
+	for _, vol := range volumes {
+		if len(results) >= globalLimit {
+			break
+		}
+
+		perVolume := query
+		perVolume.Limit = globalLimit - len(results)
+
+		items, err := h.searchVolume(&vol, perVolume)
+		if err != nil {
+			if errors.Is(err, errIndexUnavailable) {
+				continue
+			}
+			httputil.InternalError(c, "unable to search volumes")
+			return
+		}
+
+		for _, item := range items {
+			results = append(results, globalSearchResultItem{
+				VolumeID:     vol.ID.String(),
+				VolumeName:   vol.Name,
+				Name:         item.Name,
+				RelativePath: item.RelativePath,
+				MimeType:     item.MimeType,
+				SizeBytes:    item.SizeBytes,
+				ModifiedAt:   item.ModifiedAt,
+				HasThumbnail: item.HasThumbnail,
+			})
+			if len(results) >= globalLimit {
+				break
+			}
+		}
+	}
+
+	httputil.JSON(c, http.StatusOK, globalSearchResponse{
+		Query:   queryMeta,
+		Total:   len(results),
+		Results: results,
+	})
+}
+
+var errIndexUnavailable = errors.New("index unavailable")
+
+func (h *SearchHandler) searchVolume(vol *volume.Volume, query indexer.SearchQuery) ([]searchResultItem, error) {
+	idx, err := h.indexManager.Get(vol.RootPath)
+	if err != nil {
+		return nil, errIndexUnavailable
+	}
+
+	matches, err := idx.Search(query)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]searchResultItem, 0, len(matches))
+	for _, result := range matches {
 		item := searchResultItem{
 			Name:         result.Name,
 			RelativePath: result.RelativePath,
@@ -103,12 +207,7 @@ func (h *SearchHandler) Search(c *gin.Context) {
 		}
 		items = append(items, item)
 	}
-
-	httputil.JSON(c, http.StatusOK, searchResponse{
-		Query:   queryMeta,
-		Total:   len(items),
-		Results: items,
-	})
+	return items, nil
 }
 
 func parseSearchQuery(c *gin.Context) (indexer.SearchQuery, map[string]any, error) {
