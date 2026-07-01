@@ -29,6 +29,11 @@ func TestBleveIndexerIndexSearchDelete(t *testing.T) {
 	}
 	require.NoError(t, idx.Index(meta))
 
+	results, err := idx.Search(SearchQuery{Term: "vacation"})
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	require.Equal(t, "vacation.jpg", results[0].Name)
+
 	count, err = idx.index.DocCount()
 	require.NoError(t, err)
 	require.Equal(t, uint64(1), count)

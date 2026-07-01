@@ -13,7 +13,13 @@ type FileMetadata struct {
 }
 
 type SearchQuery struct {
-	Term string
+	Term           string
+	MimePrefix     string
+	MinSizeBytes   *int64
+	MaxSizeBytes   *int64
+	ModifiedAfter  *time.Time
+	ModifiedBefore *time.Time
+	Limit          int
 }
 
 type VolumeIndexer interface {

@@ -63,6 +63,84 @@ export interface PatchVolumeInput {
   filters?: VolumeFilters;
 }
 
+export interface CategoryBreakdown {
+  category: string;
+  file_count: number;
+  bytes: number;
+  proportion: number;
+}
+
+export interface MimeBreakdown {
+  mime_type: string;
+  file_count: number;
+  bytes: number;
+  proportion: number;
+}
+
+export interface VolumeSummary {
+  id: string;
+  name: string;
+  disk_path: string;
+  quota_bytes: number;
+  used_bytes: number;
+  file_count: number;
+  top_category?: string;
+  stats_computed_at?: string;
+}
+
+export interface DiskOverview {
+  path: string;
+  name: string;
+  label: string;
+  total_bytes: number;
+  free_bytes: number;
+  used_by_volumes_bytes: number;
+  volume_count: number;
+}
+
+export interface MonitoringOverview {
+  disks: DiskOverview[];
+  volumes: VolumeSummary[];
+}
+
+export interface VolumeStats {
+  volume_id: string;
+  name: string;
+  quota_bytes: number;
+  used_bytes: number;
+  free_bytes?: number;
+  usage_percent?: number;
+  file_count: number;
+  computed_at: string;
+  by_category: CategoryBreakdown[];
+  by_mime: MimeBreakdown[];
+}
+
+export interface SearchResultItem {
+  name: string;
+  relative_path: string;
+  mime_type: string;
+  size_bytes: number;
+  modified_at: string;
+  has_thumbnail: boolean;
+}
+
+export interface SearchParams {
+  q?: string;
+  mime_prefix?: string;
+  min_size?: number;
+  max_size?: number;
+  modified_after?: string;
+  modified_before?: string;
+  limit?: number;
+}
+
+export interface SearchResponse {
+  query: Record<string, unknown>;
+  total: number;
+  results: SearchResultItem[];
+}
+
 export interface LoginResponse {
   access_token: string;
   refresh_token: string;
@@ -268,5 +346,30 @@ export const api = {
     anchor.download = filename;
     anchor.click();
     URL.revokeObjectURL(url);
+  },
+  getMonitoringOverview() {
+    return apiRequest<MonitoringOverview>("/api/monitoring/overview");
+  },
+  getVolumeStats(volumeId: string) {
+    return apiRequest<VolumeStats>(`/api/monitoring/volumes/${volumeId}/stats`);
+  },
+  refreshVolumeStats(volumeId: string) {
+    return apiRequest<VolumeStats>(`/api/monitoring/volumes/${volumeId}/stats/refresh`, {
+      method: "POST",
+    });
+  },
+  searchVolumeFiles(volumeId: string, params: SearchParams = {}) {
+    const search = new URLSearchParams();
+    if (params.q) search.set("q", params.q);
+    if (params.mime_prefix) search.set("mime_prefix", params.mime_prefix);
+    if (params.min_size != null) search.set("min_size", String(params.min_size));
+    if (params.max_size != null) search.set("max_size", String(params.max_size));
+    if (params.modified_after) search.set("modified_after", params.modified_after);
+    if (params.modified_before) search.set("modified_before", params.modified_before);
+    if (params.limit != null) search.set("limit", String(params.limit));
+    const query = search.toString();
+    return apiRequest<SearchResponse>(
+      `/api/volumes/${volumeId}/search${query ? `?${query}` : ""}`,
+    );
   },
 };

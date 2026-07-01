@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Header } from "@/components/layout/Header";
 import { BreadcrumbNav } from "@/components/volumes/BreadcrumbNav";
 import { FileBrowser } from "@/components/volumes/FileBrowser";
@@ -19,9 +19,15 @@ import { formatBytes } from "@/lib/utils";
 
 export function VolumeDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const [currentPath, setCurrentPath] = useState(".");
+  const [searchParams] = useSearchParams();
+  const initialPath = searchParams.get("path") ?? ".";
+  const [currentPath, setCurrentPath] = useState(initialPath);
   const [folderName, setFolderName] = useState("");
   const [uploadError, setUploadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCurrentPath(searchParams.get("path") ?? ".");
+  }, [searchParams]);
 
   const volumeQuery = useVolume(id);
   const filesQuery = useVolumeFiles(id, currentPath);

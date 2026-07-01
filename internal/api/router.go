@@ -10,6 +10,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/theo-henon/lcloud/internal/auth"
+	"github.com/theo-henon/lcloud/internal/indexer"
+	"github.com/theo-henon/lcloud/internal/monitoring"
 	"github.com/theo-henon/lcloud/internal/volume"
 	"github.com/theo-henon/lcloud/pkg/httputil"
 )
@@ -149,13 +151,15 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 }
 
 type RouterConfig struct {
-	AuthService    *auth.Service
-	DiskRegistry   *volume.DiskRegistry
-	VolumeService  *volume.Service
-	FileService    *volume.FileService
-	MaxUploadBytes int64
-	StaticFS       fs.FS
-	GinMode        string
+	AuthService       *auth.Service
+	DiskRegistry      *volume.DiskRegistry
+	VolumeService     *volume.Service
+	FileService       *volume.FileService
+	MonitoringService *monitoring.Service
+	IndexManager      *indexer.IndexManager
+	MaxUploadBytes    int64
+	StaticFS          fs.FS
+	GinMode           string
 }
 
 func NewRouter(cfg RouterConfig) *gin.Engine {
@@ -175,6 +179,8 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	diskHandler := NewDiskHandler(cfg.DiskRegistry)
 	volumeHandler := NewVolumeHandler(cfg.VolumeService)
 	fileHandler := NewFileHandler(cfg.FileService)
+	monitoringHandler := NewMonitoringHandler(cfg.MonitoringService)
+	searchHandler := NewSearchHandler(cfg.VolumeService, cfg.IndexManager)
 
 	api := router.Group("/api")
 	{
@@ -211,6 +217,11 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			protected.GET("/volumes/:id/files/content", fileHandler.Download)
 			protected.GET("/volumes/:id/files/thumbnail", fileHandler.Thumbnail)
 			protected.DELETE("/volumes/:id/files", fileHandler.Delete)
+			protected.GET("/volumes/:id/search", searchHandler.Search)
+
+			protected.GET("/monitoring/overview", monitoringHandler.Overview)
+			protected.GET("/monitoring/volumes/:id/stats", monitoringHandler.VolumeStats)
+			protected.POST("/monitoring/volumes/:id/stats/refresh", monitoringHandler.RefreshVolumeStats)
 		}
 	}
 

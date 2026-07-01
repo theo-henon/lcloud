@@ -10,6 +10,7 @@ import (
 	"github.com/theo-henon/lcloud/internal/auth"
 	"github.com/theo-henon/lcloud/internal/config"
 	"github.com/theo-henon/lcloud/internal/indexer"
+	"github.com/theo-henon/lcloud/internal/monitoring"
 	"github.com/theo-henon/lcloud/internal/volume"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -41,7 +42,8 @@ func main() {
 	diskRegistry := volume.NewDiskRegistry(cfg)
 	indexManager := indexer.NewIndexManager()
 	volumeService := volume.NewService(db, diskRegistry, indexManager)
-	fileService := volume.NewFileService(volumeService, indexManager, cfg.MaxUploadBytes)
+	monitoringService := monitoring.NewService(volumeService, diskRegistry)
+	fileService := volume.NewFileService(volumeService, indexManager, cfg.MaxUploadBytes, monitoringService.StatsCache())
 
 	staticFS, err := fs.Sub(staticEmbed, "static")
 	if err != nil {
@@ -49,13 +51,15 @@ func main() {
 	}
 
 	router := api.NewRouter(api.RouterConfig{
-		AuthService:    authService,
-		DiskRegistry:   diskRegistry,
-		VolumeService:  volumeService,
-		FileService:    fileService,
-		MaxUploadBytes: cfg.MaxUploadBytes,
-		StaticFS:       staticFS,
-		GinMode:        cfg.GinMode,
+		AuthService:       authService,
+		DiskRegistry:      diskRegistry,
+		VolumeService:     volumeService,
+		FileService:       fileService,
+		MonitoringService: monitoringService,
+		IndexManager:      indexManager,
+		MaxUploadBytes:    cfg.MaxUploadBytes,
+		StaticFS:          staticFS,
+		GinMode:           cfg.GinMode,
 	})
 
 	addr := ":" + cfg.AppPort

@@ -5,6 +5,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
+import { MonitoringPage } from "@/pages/MonitoringPage";
 import { PlaceholderPage } from "@/pages/PlaceholderPage";
 import { VolumeDetailPage } from "@/pages/VolumeDetailPage";
 import { VolumesPage } from "@/pages/VolumesPage";
@@ -27,16 +28,7 @@ function AppRoutes() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/volumes" element={<VolumesPage />} />
           <Route path="/volumes/:id" element={<VolumeDetailPage />} />
-          <Route
-            path="/monitoring"
-            element={
-              <PlaceholderPage
-                title="Monitoring"
-                phase="Phase 1.2"
-                description="Track space usage and file breakdown across disks."
-              />
-            }
-          />
+          <Route path="/monitoring" element={<MonitoringPage />} />
           <Route
             path="/plugins"
             element={

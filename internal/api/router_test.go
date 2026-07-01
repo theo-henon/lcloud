@@ -13,6 +13,7 @@ import (
 	"github.com/theo-henon/lcloud/internal/auth"
 	"github.com/theo-henon/lcloud/internal/config"
 	"github.com/theo-henon/lcloud/internal/indexer"
+	"github.com/theo-henon/lcloud/internal/monitoring"
 	"github.com/theo-henon/lcloud/internal/volume"
 	"gorm.io/gorm"
 )
@@ -38,15 +39,18 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *auth.Service) {
 	diskRegistry := volume.NewDiskRegistry(cfg)
 	indexManager := indexer.NewIndexManager()
 	volumeService := volume.NewService(db, diskRegistry, indexManager)
-	fileService := volume.NewFileService(volumeService, indexManager, cfg.MaxUploadBytes)
+	monitoringService := monitoring.NewService(volumeService, diskRegistry)
+	fileService := volume.NewFileService(volumeService, indexManager, cfg.MaxUploadBytes, monitoringService.StatsCache())
 
 	router := NewRouter(RouterConfig{
-		AuthService:    service,
-		DiskRegistry:   diskRegistry,
-		VolumeService:  volumeService,
-		FileService:    fileService,
-		MaxUploadBytes: cfg.MaxUploadBytes,
-		GinMode:        gin.TestMode,
+		AuthService:       service,
+		DiskRegistry:      diskRegistry,
+		VolumeService:     volumeService,
+		FileService:       fileService,
+		MonitoringService: monitoringService,
+		IndexManager:      indexManager,
+		MaxUploadBytes:    cfg.MaxUploadBytes,
+		GinMode:           gin.TestMode,
 	})
 
 	return router, service

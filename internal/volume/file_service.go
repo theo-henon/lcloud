@@ -31,23 +31,35 @@ type DirectoryListing struct {
 	Entries []FileEntry `json:"entries"`
 }
 
-type FileService struct {
-	volumes        *Service
-	paths          *PathResolver
-	metadata       *MetadataCache
-	thumbnails     *ThumbnailGenerator
-	indexManager   *indexer.IndexManager
-	maxUploadBytes int64
+type StatsInvalidator interface {
+	Invalidate(rootPath string) error
 }
 
-func NewFileService(volumes *Service, indexManager *indexer.IndexManager, maxUploadBytes int64) *FileService {
+type FileService struct {
+	volumes          *Service
+	paths            *PathResolver
+	metadata         *MetadataCache
+	thumbnails       *ThumbnailGenerator
+	indexManager     *indexer.IndexManager
+	maxUploadBytes   int64
+	statsInvalidator StatsInvalidator
+}
+
+func NewFileService(volumes *Service, indexManager *indexer.IndexManager, maxUploadBytes int64, statsInvalidator StatsInvalidator) *FileService {
 	return &FileService{
-		volumes:        volumes,
-		paths:          NewPathResolver(),
-		metadata:       NewMetadataCache(),
-		thumbnails:     NewThumbnailGenerator(),
-		indexManager:   indexManager,
-		maxUploadBytes: maxUploadBytes,
+		volumes:          volumes,
+		paths:            NewPathResolver(),
+		metadata:         NewMetadataCache(),
+		thumbnails:       NewThumbnailGenerator(),
+		indexManager:     indexManager,
+		maxUploadBytes:   maxUploadBytes,
+		statsInvalidator: statsInvalidator,
+	}
+}
+
+func (s *FileService) invalidateStats(rootPath string) {
+	if s.statsInvalidator != nil {
+		_ = s.statsInvalidator.Invalidate(rootPath)
 	}
 }
 
@@ -289,6 +301,8 @@ func (s *FileService) Upload(claims *auth.Claims, volumeID uuid.UUID, relDir, fi
 		return nil, err
 	}
 
+	s.invalidateStats(vol.RootPath)
+
 	return &FileEntry{
 		Name:         filename,
 		Path:         targetRel,
@@ -387,7 +401,11 @@ func (s *FileService) Delete(claims *auth.Claims, volumeID uuid.UUID, relPath st
 	if err := os.Remove(absPath); err != nil {
 		return err
 	}
-	return s.volumes.syncUsage(vol, vol.UsedBytes-info.Size())
+	if err := s.volumes.syncUsage(vol, vol.UsedBytes-info.Size()); err != nil {
+		return err
+	}
+	s.invalidateStats(vol.RootPath)
+	return nil
 }
 
 func detectMime(path, filename string) string {
