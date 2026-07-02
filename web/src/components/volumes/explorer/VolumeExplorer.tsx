@@ -196,6 +196,17 @@ export function VolumeExplorer({ volumeId, currentPath, onPathChange }: VolumeEx
     [setPrefs],
   );
 
+  const handleColumnWidthChange = useCallback(
+    (id: ColumnId, width: number) =>
+      setPrefs((prev) => ({
+        ...prev,
+        listColumns: prev.listColumns.map((column) =>
+          column.id === id ? { ...column, width } : column,
+        ),
+      })),
+    [setPrefs],
+  );
+
   return (
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
       <div className="flex min-h-[560px] overflow-hidden rounded-lg border border-hairline bg-surface-card">
@@ -291,6 +302,7 @@ export function VolumeExplorer({ volumeId, currentPath, onPathChange }: VolumeEx
                   entries={entries}
                   listColumns={prefs.listColumns}
                   onColumnToggle={handleColumnToggle}
+                  onColumnWidthChange={handleColumnWidthChange}
                   renamingPath={renamingPath}
                   onOpenDirectory={onPathChange}
                   onOpenEntry={(entry) => void handleOpenEntry(entry)}

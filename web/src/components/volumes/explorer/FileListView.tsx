@@ -5,7 +5,7 @@ import { File, Folder } from "lucide-react";
 import { ContextMenuItem } from "@/components/ui/context-menu";
 import { ThumbnailPreview } from "@/components/volumes/ThumbnailPreview";
 import { InlineRename } from "@/components/volumes/explorer/InlineRename";
-import { ListColumnHeader } from "@/components/volumes/explorer/ListColumnPicker";
+import { ListColumnHeader } from "@/components/volumes/explorer/ListColumnHeader";
 import type { ColumnId, ListColumnPref } from "@/hooks/useExplorerPrefs";
 import { visibleListColumns } from "@/hooks/useExplorerPrefs";
 import type { FileEntry } from "@/lib/api";
@@ -16,6 +16,7 @@ type FileListViewProps = {
   entries: FileEntry[];
   listColumns: ListColumnPref[];
   onColumnToggle: (id: ColumnId, visible: boolean) => void;
+  onColumnWidthChange: (id: ColumnId, width: number) => void;
   renamingPath: string | null;
   onOpenDirectory: (path: string) => void;
   onOpenEntry: (entry: FileEntry) => void;
@@ -138,22 +139,22 @@ function renderCell(
           onCommit={(next) => onRenameCommit(entry, next)}
           onCancel={onRenameCancel}
         >
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             {entry.type === "file" && entry.has_thumbnail ? (
               <ThumbnailPreview volumeId={volumeId} path={entry.path} />
             ) : entry.type === "directory" ? (
-              <Folder className="h-5 w-5 text-primary" />
+              <Folder className="h-5 w-5 shrink-0 text-primary" />
             ) : null}
             {entry.type === "directory" ? (
               <button
                 type="button"
-                className="font-medium text-primary hover:underline"
+                className="truncate font-medium text-primary hover:underline"
                 onClick={() => onOpenDirectory(entry.path)}
               >
                 {entry.name}/
               </button>
             ) : (
-              <span className="font-medium text-ink">{entry.name}</span>
+              <span className="truncate font-medium text-ink">{entry.name}</span>
             )}
           </div>
         </InlineRename>
@@ -175,6 +176,7 @@ export function FileListView(props: FileListViewProps) {
     entries,
     listColumns,
     onColumnToggle,
+    onColumnWidthChange,
     renamingPath,
     onOpenDirectory,
     onOpenEntry,
@@ -196,9 +198,14 @@ export function FileListView(props: FileListViewProps) {
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-hairline">
-      <table className="min-w-full divide-y divide-hairline">
-        <ListColumnHeader listColumns={listColumns} onColumnToggle={onColumnToggle} />
+    <div className="overflow-x-auto rounded-lg border border-hairline">
+      <table className="min-w-full table-fixed divide-y divide-hairline">
+        <ListColumnHeader
+          listColumns={listColumns}
+          entries={entries}
+          onColumnToggle={onColumnToggle}
+          onColumnWidthChange={onColumnWidthChange}
+        />
           <tbody className="divide-y divide-hairline bg-surface-card">
           {entries.map((entry) => (
             <RowContextMenu
@@ -216,7 +223,12 @@ export function FileListView(props: FileListViewProps) {
                     {columns.map((column) => (
                       <td
                         key={column.id}
-                        className="px-4 py-3 text-sm text-body"
+                        className="overflow-hidden px-4 py-3 text-sm text-body"
+                        style={{
+                          width: column.width,
+                          minWidth: column.width,
+                          maxWidth: column.width,
+                        }}
                         onContextMenu={onContextMenu}
                         onDoubleClick={() => {
                           if (entry.type === "directory") {
@@ -226,15 +238,30 @@ export function FileListView(props: FileListViewProps) {
                           }
                         }}
                       >
-                        {renderCell(
-                          column,
-                          entry,
-                          volumeId,
-                          renamingPath,
-                          onOpenDirectory,
-                          onRenameRequest,
-                          onRenameCommit,
-                          onRenameCancel,
+                        {column.id === "name" ? (
+                          renderCell(
+                            column,
+                            entry,
+                            volumeId,
+                            renamingPath,
+                            onOpenDirectory,
+                            onRenameRequest,
+                            onRenameCommit,
+                            onRenameCancel,
+                          )
+                        ) : (
+                          <span className="block truncate">
+                            {renderCell(
+                              column,
+                              entry,
+                              volumeId,
+                              renamingPath,
+                              onOpenDirectory,
+                              onRenameRequest,
+                              onRenameCommit,
+                              onRenameCancel,
+                            )}
+                          </span>
                         )}
                       </td>
                     ))}
