@@ -1,55 +1,75 @@
-# Spec: Phase 1.4 — Task system
+# Spec: Volume file explorer — UX redesign
 
-> **Status:** Draft — pending review
-> **Scope:** Task scheduler (gocron), macro executor, predefined macro vocabulary, task CRUD API, task history, Tasks UI. **MVP milestone** — last bootstrap phase.
-> **Prerequisite:** Phase 1.1 (volumes, files, metadata cache, Bleve indexer), Phase 1.2 (monitoring, `ComputeStats`, stats cache), Phase 1.3 (event bus, `task.executed` / `task.failed` / `volume.alert.usage` event types defined).
-> **Sources:** [VISION.md](./VISION.md), [docs/project.md](./docs/project.md)
+> **Status:** Draft — pending review  
+> **Scope:** Replace the MVP file browser on `/volumes/:id` with a familiar cloud-drive layout (sidebar tree, toolbar, list/grid views, inline rename, drag-and-drop upload + internal move, in-explorer file preview for PDF/text/images via an extensible opener registry). Expose move/rename file operations via the web API.  
+> **Prerequisite:** Phase 1.1 (volumes + file API), Phase 1.4 (`MoveFileInternal`, `file.moved` event bus wiring).  
+> **Sources:** [VISION.md](./VISION.md), [docs/project.md](./docs/project.md), [IDEAS.md — Volume file explorer UX redesign](./IDEAS.md), [design/DESIGN.md](./design/DESIGN.md)
 
 ---
 
 ## Assumptions (correct me now or I proceed)
 
-1. **Phases 1.1–1.3 are shipped** — volume CRUD, file upload/delete, monitoring stats, plugin event bus operational.
-2. **`internal/task/` is greenfield** — module referenced in docs but not yet created; Phase 1.4 creates it entirely.
-3. **gocron v2 is new** — `github.com/go-co-op/gocron/v2` added during `/build`; not yet in `go.mod`.
-4. **Cron schedules use UTC** — server timezone is not exposed in MVP; UI displays "UTC" next to cron helpers.
-5. **Manual run is in MVP** — UC4.2 allows triggering a task immediately via API/UI (`POST /tasks/:id/run`), in addition to scheduled runs.
-6. **Volume-scoped tasks are the primary path** — UC4.1 creates a task bound to one volume; global scope is admin-only and limited to macros that iterate volumes (see Macro catalog).
-7. **Macro file ops bypass JWT but stay in `internal/volume/`** — tasks call new internal methods (`MoveFileInternal`, `DeleteFileInternal`) that reuse metadata/index/thumbnail/event logic; no auth claims required because the task record already validated ownership at CRUD time.
-8. **`file.moved` is emitted by move macros** — `move_files`, `sort_by_type`, `sort_by_date` emit `file.moved` per affected file; first emission site in the codebase.
-9. **`rebuild_index` re-indexes from metadata cache** — `BleveIndexer.Rebuild` clears the index; macro then walks `./cache/metadata/` and re-indexes all records (metadata is source for rebuild, not a fresh disk walk).
-10. **`clear_cache` does not wipe Bleve index** — STARTUP specifies thumbnails + metadata cache only; search index remains (use `rebuild_index` separately if needed).
-11. **Task history in PostgreSQL** — last run time, status, affected file count, error message; not written to `{volume}/logs/` in MVP (directory exists but stays empty).
-12. **`alert_usage` writes to task run history + event bus** — emits `volume.alert.usage`; no separate on-disk alert log in MVP.
-13. **Macro vocabulary is closed** — no new macro names without a `/spec` cycle (AGENTS.md).
-14. **ADR required before merge** — task model, scheduler wiring, macro executor boundaries documented in `docs/adr/` via `documentation-and-adrs`.
-15. **Dry-run mode in MVP** — destructive macros accept `dry_run: true`; preview impact without touching files (see Macro catalog + OQ1).
+1. **MVP file API is shipped** — list, upload (single file), create directory, download, delete, thumbnail.
+2. **`MoveFileInternal` exists** — in `internal/volume/macro_ops.go`, files only, no JWT; used by task macros today, not exposed to the web UI.
+3. **`file.renamed` is defined on the plugin bus** — constant exists in `internal/plugin/events.go`, but no `FileRenamed` publisher in `volume.EventPublisher` yet; rename will add it.
+4. **No new volume directory structure** — explorer redesign is UI + web API only; `.volume.json` unchanged.
+5. **Layout preferences stay client-side in v1** — view mode, columns, widths stored in `localStorage`; server-side prefs deferred until post-ship validation (IDEAS.md).
+6. **Target UX = OneDrive / Google Drive / Dropbox** — not a custom admin-table layout; operator decisions in IDEAS.md are binding for v1.
+7. **Directory drag-move is out of v1** — drag-and-drop move applies to **files** onto folder targets; folder relocation deferred (metadata path cascade is heavier).
+8. **Inline rename applies to files and folders** — Windows Explorer mental model (F2, context menu, slow double-click on name).
+9. **Multi-file upload is in v1** — drop external files onto the contents pane uploads all dropped files with per-file progress (IDEAS competitive gap; natural fit once the permanent upload banner is removed).
+10. **Multi-select / bulk delete-download is v1.1** — not blocking the layout redesign; can ship immediately after if time allows.
+11. **Trash / soft-delete is out of scope** — separate IDEAS entry; explorer keeps permanent delete with confirm dialog for v1.
+12. **Copy / duplicate is out of scope** — separate IDEAS entry; no copy API in v1.
+13. **No new backend search/tree endpoint in v1** — lazy folder tree uses existing `GET /files?path=` per expanded node.
+14. **`@dnd-kit/core` approved for drag-and-drop** — `@dnd-kit/core` + `@dnd-kit/utilities` (OQ1 ✅).
+15. **Double-click opens preview when a registered opener matches** — v1 built-in openers: **PDF**, **text**, **images**; other types fall back to download.
+16. **File opener registry is the extension point** — v1 ships core + built-in openers only; plugins register additional MIME handlers later (e.g. video → FFmpeg transcode stream) without redesigning the explorer.
 
 ---
 
 ## Objective
 
-Build the task scheduler and connect it to predefined macros operating on volumes — the automation layer described in VISION.md. Completing Phase 1.4 **reaches the lcloud MVP**.
+Replace the minimal MVP explorer (`VolumeDetailPage` + flat `FileBrowser` + permanent `UploadZone` + always-visible "New folder" form) with a **standard cloud file manager** that homelab users already know how to use.
 
-**Who:** Self-hosters who want recurring maintenance (cleanup, organization, index rebuild) without manual intervention.
+**Who:** Self-hosters managing files daily in the web UI — same audience as VISION.md Principle 3 (technical, expects familiar tooling).
+
+**Pain points addressed (operator feedback, IDEAS.md):**
+
+| Today (MVP) | Target (v1) |
+|---|---|
+| Permanent dashed upload banner above the list | Upload via toolbar button + drop **onto** the contents pane |
+| Always-visible "New folder" text field | **New ▾** menu → "New folder" (inline input or small dialog) |
+| Flat table, click folder name to navigate | **Left folder tree** (lazy) + breadcrumb + main pane |
+| List only, fixed columns | **List + grid** toggle; customizable list columns |
+| No rename | **Inline rename** (files + folders) |
+| No internal drag-move | **Drag file → folder** (tree or list row) to move |
+| Single-file upload (`files[0]`) | **Multi-file** drop / file picker |
 
 **User stories:**
 
 | ID | Story |
 |---|---|
-| UC4.1 | As a user, I create a task "Delete images older than 90 days" on my Photos volume, scheduled every Sunday at 2:00 UTC. |
-| UC4.2 | The task runs (scheduled or manually triggered), deletes old files, and the execution appears in task history with the count of deleted files. |
+| UX1 | As a user, I open a volume and see a folder tree on the left and files on the right — like Google Drive. |
+| UX2 | As a user, I drop files from my desktop onto the file list and they upload into the current folder, with progress per file. |
+| UX3 | As a user, I click **New → Folder**, type a name, and the folder appears without a permanent form taking space. |
+| UX4 | As a user, I press F2 (or use the context menu) to rename a file or folder in place. |
+| UX5 | As a user, I drag a file onto a folder in the tree or list to move it. |
+| UX6 | As a user, I switch between list and grid view; my choice persists on this browser. |
+| UX7 | As a user, I customize which columns appear in list view (name always visible); widths and order persist locally. |
+| UX8 | As a user, I double-click a PDF, text file, or image and it opens in a preview panel inside the explorer — without leaving the page. |
+| UX9 | As a user, I double-click an unsupported file type and it downloads (same as today). |
 
-**Out of scope for Phase 1.4:**
+**Out of scope for v1:**
 
-- Custom/user-defined macros or scripting language
-- Event-triggered tasks (run on `file.uploaded`, etc.) — schedule-only in MVP
-- Task templates / marketplace
-- Email, webhook, or push notifications for alerts (event bus only; plugins can subscribe)
-- Per-file undo / rollback of macro runs
-- Changes to `.volume.json` schema or volume directory structure
-- Hot-reload of task schedules without restart (gocron updates in-process on CRUD — no restart needed)
-- Kubernetes CronJob / external scheduler
+- FTP / WebDAV UI, sync/conflict UI, in-browser **text editor** (read-only text preview only)
+- **Video / audio preview** — deferred; opener registry + plugin contract defined so a plugin can add them (e.g. FFmpeg transcode for editors)
+- Trash / soft-delete, file copy/duplicate, version history
+- Directory drag-move (move entire folders by drag)
+- Bulk multi-select actions (planned v1.1 — see [Follow-up slice](#follow-up-slice-v11))
+- Server-side layout preference storage
+- Changes to `.volume.json` or volume directory structure
+- Full-text content search in the explorer (Bleve filename search stays in sidebar `GlobalSearch`)
 
 ---
 
@@ -57,15 +77,21 @@ Build the task scheduler and connect it to predefined macros operating on volume
 
 See [docs/project.md — Tech Stack](./docs/project.md#tech-stack).
 
-Phase 1.4 adds:
+This feature adds or extends:
 
 | Layer | Addition |
 |---|---|
-| Backend | `github.com/go-co-op/gocron/v2` — in-process cron + interval scheduler |
-| Backend | PostgreSQL models: `Task`, `TaskRun` |
-| Backend | `internal/task/` — scheduler, macro registry, executor |
-| Backend | `internal/volume/macro_ops.go` — internal move/delete used by macros |
-| Frontend | Tasks page, task form, run history |
+| Backend | `FileService.Move`, `FileService.Rename` (auth-aware wrappers over shared move/rename logic) |
+| Backend | `PATCH /api/volumes/:id/files/move`, `PATCH /api/volumes/:id/files/rename` |
+| Backend | `FileRenamedEvent` on `EventPublisher` + plugin bridge `FromFileRenamed` |
+| Backend | `RenameDirectoryInternal` — filesystem rename + metadata/index path cascade for folders |
+| Frontend | Explorer shell: tree, toolbar, contents pane, context menu, inline rename |
+| Frontend | `localStorage` layout prefs store |
+| Frontend | Multi-file upload queue with per-file progress |
+| Frontend | `@dnd-kit/core` + `@dnd-kit/utilities` for drag-and-drop |
+| Frontend | **File opener registry** + built-in openers (PDF, text, image) + `PreviewPanel` |
+| Frontend | shadcn **Context Menu** + **Dropdown Menu** components (add to `web/src/components/ui/`) |
+| Backend | `GET /files/content?disposition=inline` for in-browser preview (attachment remains default) |
 
 ---
 
@@ -74,23 +100,21 @@ Phase 1.4 adds:
 ### Development
 
 ```bash
-# Add gocron dependency (during /build)
-go get github.com/go-co-op/gocron/v2
+# Backend — file move/rename focus
+go test ./internal/volume/... -run 'Move|Rename' -cover
+go test ./internal/api/... -run File -cover
+go test ./...
 
-# Backend tests (task module focus)
-go test ./internal/task/... -cover
-go test ./internal/volume/... -run Macro -cover
-go test ./... -cover
-
-# Frontend tests
+# Frontend
 cd web && npm run test
+cd web && npm run build
 
 # Local stack
 docker compose up -d --build
 docker compose logs -f app
 ```
 
-### Verification (Phase 1.4 done)
+### Verification (explorer redesign done)
 
 ```bash
 TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
@@ -98,42 +122,35 @@ TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
   -d '{"email":"<ADMIN_EMAIL>","password":"<ADMIN_PASSWORD>"}' \
   | jq -r '.access_token')
 
-VOL_ID="<photos-volume-uuid>"
+VOL_ID="<volume-uuid>"
 
-# 1. Create scheduled cleanup task
-TASK=$(curl -s -X POST http://localhost:8080/api/tasks \
+# 1. List root (unchanged)
+curl -s "http://localhost:8080/api/volumes/$VOL_ID/files?path=." \
+  -H "Authorization: Bearer $TOKEN" | jq
+
+# 2. Create folder via API (unchanged)
+curl -s -X POST "http://localhost:8080/api/volumes/$VOL_ID/files/directories" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"name\": \"Delete old photos\",
-    \"macro\": \"delete_old_files\",
-    \"scope\": \"volume\",
-    \"volume_id\": \"$VOL_ID\",
-    \"parameters\": {\"days\": 90, \"extensions\": [\".jpg\", \".png\", \".webp\"]},
-    \"schedule_type\": \"cron\",
-    \"schedule\": \"0 2 * * 0\",
-    \"enabled\": true
-  }")
-TASK_ID=$(echo "$TASK" | jq -r '.id')
-echo "$TASK" | jq
+  -d '{"path":"photos/2024"}' | jq
 
-# 2. Manual run (UC4.2)
-curl -s -X POST "http://localhost:8080/api/tasks/$TASK_ID/run" \
-  -H "Authorization: Bearer $TOKEN" | jq
-
-# 3. Task history shows affected count
-curl -s "http://localhost:8080/api/tasks/$TASK_ID/runs?limit=5" \
-  -H "Authorization: Bearer $TOKEN" | jq
-
-# 4. List tasks — next_run_at populated
-curl -s http://localhost:8080/api/tasks \
-  -H "Authorization: Bearer $TOKEN" | jq
-
-# 5. Disable task
-curl -s -X PATCH "http://localhost:8080/api/tasks/$TASK_ID" \
+# 3. Move file into folder
+curl -s -X PATCH "http://localhost:8080/api/volumes/$VOL_ID/files/move" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"enabled": false}' | jq
+  -d '{"from_path":"vacation.jpg","to_path":"photos/2024/vacation.jpg"}' | jq
+
+# 4. Rename file in place
+curl -s -X PATCH "http://localhost:8080/api/volumes/$VOL_ID/files/rename" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"path":"photos/2024/vacation.jpg","new_name":"summer.jpg"}' | jq
+
+# 5. Rename folder
+curl -s -X PATCH "http://localhost:8080/api/volumes/$VOL_ID/files/rename" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"path":"photos/2024","new_name":"2024-summer"}' | jq
 ```
 
 ---
@@ -142,574 +159,462 @@ curl -s -X PATCH "http://localhost:8080/api/tasks/$TASK_ID" \
 
 See [docs/project.md — Project structure](./docs/project.md#project-structure).
 
-Phase 1.4 creates or extends:
+This feature creates or extends:
 
 ```
 lcloud/
 ├── internal/
-│   ├── task/
-│   │   ├── model.go              ← GORM Task, TaskRun
-│   │   ├── macros.go             ← macro name constants + param schemas
-│   │   ├── registry.go           ← macro name → executor func
-│   │   ├── executor.go             ← MacroExecutor, dispatches by macro type
-│   │   ├── scheduler.go          ← gocron wrapper, load/register jobs
-│   │   ├── service.go            ← CRUD, run-now, history
-│   │   ├── service_test.go
-│   │   ├── executor_test.go
-│   │   └── scheduler_test.go
 │   ├── volume/
-│   │   └── macro_ops.go          ← MoveFileInternal, DeleteFileInternal
+│   │   ├── file_ops.go              ← shared MoveFile/RenameFile/RenameDirectory (used by FileService + MacroOps)
+│   │   ├── file_ops_test.go
+│   │   ├── file_service.go          ← Move, Rename methods
+│   │   ├── events.go                ← FileRenamedEvent + publisher method
+│   │   └── macro_ops.go             ← delegate to shared file_ops (no duplication)
 │   ├── plugin/
-│   │   └── events.go             ← FromTaskExecuted, FromTaskFailed, FromVolumeAlertUsage
+│   │   └── events.go                ← FromFileRenamed bridge
 │   └── api/
-│       ├── task_handler.go
-│       └── router.go             ← register task routes
-├── cmd/server/main.go            ← wire task service, start scheduler, graceful shutdown
+│       ├── file_handler.go          ← Move, Rename handlers
+│       └── router.go                ← register PATCH routes
 ├── web/src/
-│   ├── pages/TasksPage.tsx       ← replace PlaceholderPage
-│   ├── components/tasks/
-│   │   ├── TaskList.tsx
-│   │   ├── TaskForm.tsx
-│   │   ├── TaskRunHistory.tsx
-│   │   ├── MacroParameterFields.tsx
-│   │   └── ScheduleFields.tsx
-│   └── hooks/useTasks.ts
+│   ├── pages/
+│   │   └── VolumeDetailPage.tsx     ← thin shell; compose explorer layout
+│   ├── components/volumes/explorer/
+│   │   ├── VolumeExplorer.tsx       ← layout orchestrator
+│   │   ├── FolderTree.tsx           ← lazy sidebar tree
+│   │   ├── ExplorerToolbar.tsx      ← New, Upload, view toggle, column picker
+│   │   ├── ContentsPane.tsx         ← drop target wrapper
+│   │   ├── FileListView.tsx         ← resizable/reorderable columns
+│   │   ├── FileGridView.tsx         ← thumbnail grid
+│   │   ├── FileContextMenu.tsx
+│   │   ├── InlineRename.tsx
+│   │   ├── UploadQueue.tsx          ← multi-file progress
+│   │   ├── PreviewPanel.tsx         ← in-explorer preview shell
+│   │   └── explorer.test.tsx
+│   ├── lib/fileOpeners/
+│   │   ├── registry.ts              ← FileOpener interface + register/resolve
+│   │   ├── imageOpener.ts
+│   │   ├── textOpener.ts
+│   │   ├── pdfOpener.ts
+│   │   └── registry.test.ts
+│   ├── hooks/
+│   │   ├── useVolumeFiles.ts        ← add useMoveFile, useRenameFile
+│   │   ├── useExplorerPrefs.ts      ← localStorage read/write
+│   │   └── useFilePreview.ts        ← resolve opener + panel state
+│   └── store/
+│       └── explorerPrefs.ts         ← optional Zustand mirror of prefs
 ├── docs/
 │   └── adr/
-│       └── NNN-task-system.md    ← scheduler + macro vocabulary (created at /build)
-└── SPEC.md                       ← this file
+│       └── NNN-volume-explorer-file-ops.md   ← web move/rename API (created at /build)
+└── SPEC.md                          ← this file
 ```
+
+**Removed / deprecated after ship:**
+
+- `web/src/components/volumes/UploadZone.tsx` — logic absorbed into `ContentsPane` + `UploadQueue` (file may remain exported for tests until deleted)
+- `web/src/components/volumes/FileBrowser.tsx` — replaced by `FileListView` / `FileGridView`
 
 ---
 
 ## Architecture
 
-### Execution flow
+### Layout (target)
 
 ```
-gocron trigger (cron | interval)
-    → task.Service.executeTask(taskID)
-    → MacroExecutor.Run(ctx, task)
-    → registry[macro](ctx, deps, volume, params)
-    → volume.MacroOps (move/delete) | monitoring.ComputeStats | indexer.Rebuild+reindex
-    → TaskRun persisted (status, affected_count, error)
-    → EventPublisher: task.executed | task.failed | file.moved | volume.alert.usage
-    → Plugin bus (async, existing pattern)
+┌─────────────────────────────────────────────────────────────────┐
+│ Header — volume name, quota, "Back to volumes"                  │
+├──────────────┬──────────────────────────────────────────────────┤
+│ FolderTree   │ ExplorerToolbar — [New▾] [Upload] [≡|▦] [Columns]│
+│ (lazy,       ├──────────────────────────────────────────────────┤
+│  resizable)  │ BreadcrumbNav                                    │
+│              ├──────────────────────────────────────────────────┤
+│              │ ContentsPane — list OR grid                      │
+│              │  · external drop → upload queue                  │
+│              │  · internal drag → move onto folder highlight  │
+│              │  · context menu, inline rename                   │
+└──────────────┴──────────────────────────────────────────────────┘
 ```
 
 ### Module boundaries (AGENTS.md)
 
-- **`internal/task/`** owns scheduling, macro dispatch, task CRUD, run history.
-- **`internal/volume/`** owns all disk mutations — macros never write to `userdata/` directly from `task/`.
-- **`internal/monitoring/`** — `ComputeStats` called by `compute_stats` macro (existing method).
-- **`internal/indexer/`** — `Rebuild` + `Index` called by `rebuild_index` macro via `VolumeIndexer` interface only.
-- **Event emission** — task service publishes via extended `EventPublisher` or plugin bridge helpers; domain modules do not import `internal/task/`.
-- **No business logic in Gin handlers** — handlers call `task.Service` only.
+- **`internal/volume/`** owns all disk mutations — handlers call `FileService` only.
+- **`MoveFileInternal` logic consolidated** — extract shared implementation in `file_ops.go`; `MacroOps` and `FileService` both call it (no duplicated `os.Rename` paths).
+- **`VolumeIndexer` interface only** — index updates inside `file_ops.go` via `indexManager`; never import Bleve from `api/`.
+- **Event bus** — `file.moved` when destination directory changes; `file.renamed` when parent directory unchanged (name change only). Plugin bridge maps both.
+- **No business logic in Gin handlers** — validate JSON, call service, map errors.
 
-### Concurrency
+### Lazy folder tree
 
-| Rule | Behavior |
-|---|---|
-| Same task | At most one run in progress; concurrent trigger (schedule + manual) skips if already running |
-| Same volume | Destructive macros (`delete_*`, `move_*`, `sort_*`, `clear_cache`) acquire a per-volume mutex for the whole run — see **OQ2** for collision policy |
-| Non-destructive | `rebuild_index`, `compute_stats`, `alert_usage` may run concurrently with each other and **while** a destructive macro holds the volume lock |
-| Dry-run runs | A dry-run (`dry_run: true`) **does not** acquire the volume mutex — read-only scan; safe to overlap with other dry-runs |
+- Tree root = volume root (`path=.`), fetch via `GET /files?path=<node>`.
+- Client filters `entries` where `type === "directory"`.
+- Expand node → fetch children; cache in TanStack Query (`staleTime: 30s`).
+- Selecting a tree node sets `currentPath` → contents pane refetches same path.
+- Tree stays in sync on create/move/rename/delete via query invalidation on `["volumes", volumeId, "files"]`.
 
-### Scheduler lifecycle
+### Drag-and-drop semantics
 
-1. **Startup:** load enabled tasks from PostgreSQL → register gocron jobs → compute `next_run_at`.
-2. **CRUD:** create/update/delete task → unregister old job → register new job (in-process, no restart).
-3. **Shutdown:** `scheduler.Shutdown()` on SIGTERM before plugin stop.
-
----
-
-## Data models
-
-### PostgreSQL — `tasks`
-
-```go
-type Task struct {
-    ID           uuid.UUID      `gorm:"type:uuid;primaryKey"`
-    OwnerID      uuid.UUID      `gorm:"type:uuid;not null;index"`
-    Name         string         `gorm:"not null"`
-    Macro        string         `gorm:"not null;index"` // predefined macro name
-    Scope        string         `gorm:"not null"`       // volume | global
-    VolumeID     *uuid.UUID     `gorm:"type:uuid;index"` // required when scope=volume
-    Parameters   JSON           `gorm:"type:jsonb;not null;default:'{}'"`
-    ScheduleType string         `gorm:"not null"` // cron | interval
-    Schedule     string         `gorm:"not null"` // cron expr or Go duration e.g. "24h"
-    Enabled      bool           `gorm:"not null;default:true"`
-    NextRunAt    *time.Time     `gorm:"index"`
-    LastRunAt    *time.Time
-    CreatedAt    time.Time
-    UpdatedAt    time.Time
-}
-```
-
-**Validation rules:**
-
-- `macro` must be in the predefined catalog.
-- `scope=volume` → `volume_id` required; owner must own volume (or admin).
-- `scope=global` → `volume_id` null; **admin-only** create/update; macro must allow global scope.
-- `schedule_type=cron` → validate with standard 5-field cron parser (minute hour dom month dow).
-- `schedule_type=interval` → parse as Go duration (`1h`, `24h`, `168h`); minimum `1m`.
-- `parameters` validated per macro schema before save.
-
-### PostgreSQL — `task_runs`
-
-```go
-type TaskRun struct {
-    ID            uuid.UUID  `gorm:"type:uuid;primaryKey"`
-    TaskID        uuid.UUID  `gorm:"type:uuid;not null;index"`
-    Status        string     `gorm:"not null"` // success | failed | skipped | dry_run
-    AffectedCount int        `gorm:"not null;default:0"`
-    Message       string     // human-readable summary
-    Error         string     // set when status=failed
-    StartedAt     time.Time  `gorm:"not null;index"`
-    FinishedAt    time.Time
-    DurationMs    int64
-}
-```
-
-**Retention:** last **200 runs per task** — delete oldest on insert when exceeded (mirrors plugin log policy).
-
----
-
-## Macro catalog (closed vocabulary)
-
-All macros return `MacroResult{AffectedCount, Message}`.
-
-### Scope matrix
-
-| Macro | Volume | Global (admin) |
+| Drag source | Drop target | Action |
 |---|---|---|
-| `delete_old_files` | ✅ | ❌ |
-| `delete_large_files` | ✅ | ❌ |
-| `clear_cache` | ✅ | ❌ |
-| `move_files` | ✅ | ❌ |
-| `sort_by_type` | ✅ | ❌ |
-| `sort_by_date` | ✅ | ❌ |
-| `rebuild_index` | ✅ | ✅ (all volumes) |
-| `compute_stats` | ✅ | ✅ (all volumes) |
-| `alert_usage` | ✅ | ✅ (all volumes) |
+| External files (OS) | Contents pane (not on a folder row) | Upload into `currentPath` |
+| External files | Folder row / tree node | Upload into that folder's path |
+| Internal file row | Folder row / tree node | `PATCH .../move` |
+| Internal file row | Contents pane background | No-op (or move to current folder = no-op) |
 
-Global execution iterates volumes the task owner can access (admin: all volumes; user: own volumes only — global tasks admin-only in MVP so this is admin → all volumes).
+**Visual feedback:** valid folder target highlights with `border-primary` + `bg-surface-elevated` per DESIGN.md.
 
-### Dry-run mode (MVP)
+**Upload vs move detection:** `dataTransfer.types` — if `"Files"` from external, upload; if internal drag uses `application/x-lcloud-path` custom type, move.
 
-Destructive macros support an optional **`dry_run`** parameter (boolean, default `false`). When `true`:
+### File opener registry (preview on double-click)
 
-| Behavior | Detail |
-|---|---|
-| Disk | **No mutation** — no delete, move, or cache wipe |
-| Events | **No emission** — no `file.deleted`, `file.moved`, `task.executed` side-effects on individual files (task-level `task.executed` still fires with status `dry_run`) |
-| History | Run status = `dry_run`; `affected_count` = number of files **that would** be affected |
-| Message | Human-readable summary, e.g. `"Would delete 12 files older than 90 days"`; optional `preview_paths` (max 20) in run detail API |
-| Mutex | Does **not** take the destructive volume lock |
+Double-click (or context menu **Open**) resolves the first matching opener from a **priority-sorted registry**. Unmatched types → download fallback.
 
-**Macros supporting `dry_run`:** `delete_old_files`, `delete_large_files`, `clear_cache`, `move_files`, `sort_by_type`, `sort_by_date`.
+#### `FileOpener` interface (frontend contract)
 
-**Not supported:** `rebuild_index`, `compute_stats`, `alert_usage` (non-destructive or read-only already).
+```typescript
+export type FileOpenerContext = {
+  volumeId: string;
+  entry: FileEntry;
+  contentUrl: string; // authenticated content URL
+};
 
-**UI:** checkbox "Simulation only (dry-run)" in task form; "Run simulation" button on Run-now dialog when macro is destructive. Scheduled runs honour the task's saved `dry_run` parameter — a scheduled dry-run task never mutates files.
-
-**One-shot override:** `POST /tasks/:id/run?dry_run=true` runs a simulation even if the saved task has `dry_run: false` (useful for preview before enabling a destructive schedule).
-
-### Cleanup
-
-#### `delete_old_files`
-
-Delete files in `./userdata/` whose **modification date** is older than N days.
-
-| Parameter | Type | Required | Default |
-|---|---|---|---|
-| `days` | int | yes | — |
-| `extensions` | []string | no | all files |
-| `dry_run` | bool | no | `false` |
-
-- Match against `FileMetadataRecord.ModifiedAt` from metadata cache; fallback to `os.Stat` if metadata missing.
-- Uses `DeleteFileInternal` per match (skipped when `dry_run: true`).
-- Does not delete directories.
-
-#### `delete_large_files`
-
-Delete files larger than N megabytes.
-
-| Parameter | Type | Required | Default |
-|---|---|---|---|
-| `min_size_mb` | int | yes | — |
-| `extensions` | []string | no | all files |
-| `dry_run` | bool | no | `false` |
-
-- Compare `SizeBytes >= min_size_mb * 1024 * 1024`.
-
-#### `clear_cache`
-
-Wipe `./cache/thumbnails/` and `./cache/metadata/` for the volume.
-
-| Parameter | Type | Required | Default |
-|---|---|---|---|
-| `dry_run` | bool | no | `false` |
-
-- Remove all files in both dirs; recreate empty dirs (skipped when `dry_run: true`).
-- Invalidate stats cache (`StatsCache.Invalidate`).
-- Does **not** remove `./cache/index/` (Bleve).
-- `AffectedCount` = number of metadata records removed.
-
-### Organization
-
-#### `move_files`
-
-Move files matching a glob pattern to a target subfolder under `./userdata/`.
-
-| Parameter | Type | Required | Default |
-|---|---|---|---|
-| `pattern` | string | yes | — |
-| `target_subfolder` | string | yes | — |
-| `dry_run` | bool | no | `false` |
-
-- Glob matched against relative path from userdata root (e.g. `*.jpg`, `vacation/*.png`).
-- `target_subfolder` sanitized via `PathResolver` (no `..`).
-- Creates target directory if missing.
-- Skips if destination file already exists (count as skipped, not error).
-- Uses `MoveFileInternal`; emits `file.moved` per file.
-
-#### `sort_by_type`
-
-| Parameter | Type | Required | Default |
-|---|---|---|---|
-| `dry_run` | bool | no | `false` |
-
-Auto-sort files into type-based subfolders at userdata root:
-
-| Folder | MIME rule (reuse `monitoring.CategoryForMIME`) |
-|---|---|
-| `images/` | `image/*` |
-| `documents/` | documents category |
-| `videos/` | `video/*` |
-| `audio/` | `audio/*` |
-| `other/` | everything else |
-
-- Only moves files **directly in userdata root** (not recursive into existing subfolders) — avoids reshuffling organized trees.
-- Archives category maps to `other/` (no `archives/` folder in STARTUP list).
-
-#### `sort_by_date`
-
-| Parameter | Type | Required | Default |
-|---|---|---|---|
-| `dry_run` | bool | no | `false` |
-
-Auto-sort files from userdata root into `YYYY/MM/` subfolders based on **modification date**.
-
-- Same non-recursive rule as `sort_by_type`.
-- Example: file modified 2026-03-15 → `2026/03/filename.jpg`.
-
-### Maintenance
-
-#### `rebuild_index`
-
-Force full Bleve reindex.
-
-1. `VolumeIndexer.Rebuild(volumePath)` — clears index files.
-2. Walk metadata cache (`ListAll`) → `Index` each record.
-3. `AffectedCount` = records re-indexed.
-
-#### `compute_stats`
-
-Force recalculation of volume statistics.
-
-- Calls existing `monitoring.Service.ComputeStats(vol)`.
-- `AffectedCount` = file count from computed stats.
-
-### Alerts
-
-#### `alert_usage`
-
-Check if volume usage exceeds threshold; log and emit event when triggered.
-
-| Parameter | Type | Required | Default |
-|---|---|---|---|
-| `threshold_percent` | int | yes | — |
-
-- Usage = `vol.UsedBytes / vol.QuotaBytes * 100` (skip if `QuotaBytes == 0`).
-- When exceeded: emit `volume.alert.usage` with `{usage_percent, quota_bytes, used_bytes}`.
-- `AffectedCount` = 1 when alert fired, 0 otherwise.
-- Does not block or delete files.
-
----
-
-## Internal volume operations
-
-New file `internal/volume/macro_ops.go` — used **only** by `internal/task/` (same module, unexported helpers or `MacroOps` struct).
-
-```go
-type MacroOps struct {
-    volumes      *Service
-    paths        *PathResolver
-    metadata     *MetadataCache
-    thumbnails   *ThumbnailGenerator
-    indexManager *indexer.IndexManager
-    statsCache   StatsInvalidator
-    events       EventPublisher
+export interface FileOpener {
+  id: string;
+  label: string;
+  priority: number;
+  canOpen(entry: FileEntry): boolean;
+  open(ctx: FileOpenerContext, panel: PreviewPanelApi): void;
 }
-
-// DeleteFileInternal removes a file by relative path without auth claims.
-// Reuses the same steps as FileService.Delete (metadata, thumbnail, index, usage, events).
-func (m *MacroOps) DeleteFileInternal(ctx context.Context, vol *Volume, relPath string) error
-
-// MoveFileInternal moves within userdata; updates metadata path, re-indexes, emits file.moved.
-func (m *MacroOps) MoveFileInternal(ctx context.Context, vol *Volume, fromRel, toRel string) error
 ```
 
-**Security:** callers must validate task ownership before invoking. Macro ops trust the task layer.
+- **`registerFileOpener(opener)`** — append to registry (built-ins register at module init).
+- **`resolveFileOpener(entry)`** — highest `priority` wins among matchers.
+- **`PreviewPanel`** — shared shell: header (filename, close, download), body slot rendered by opener.
 
-**Events added to `volume.EventPublisher`:**
+#### Built-in openers (v1)
+
+| Opener | Match rule | Render |
+|---|---|---|
+| `core.image` | `mime_type` starts with `image/` | `<img>` via `contentUrl` (`disposition=inline`) |
+| `core.text` | `text/*` or ext `.txt`, `.md`, `.json`, `.yaml`, `.yml`, `.log`, `.csv` | Fetch text (max **512 KiB**); show in scrollable `<pre>` (JetBrains Mono); truncate with notice if larger |
+| `core.pdf` | `application/pdf` or ext `.pdf` | `<iframe>` or `<embed>` via inline content URL |
+
+**Not in v1:** `video/*`, `audio/*` — no built-in opener; double-click downloads. Registry slot reserved for plugins.
+
+#### Plugin extension (designed now, implemented post-v1)
+
+Aligns with VISION extensibility — plugins must not patch explorer React code.
+
+**Phase B (follow-up, separate `/spec` or plugin SDK ADR):**
+
+1. Plugins declare preview capabilities at registration, e.g. `{ "mime_prefixes": ["video/"], "opener_id": "ffmpeg.transcode" }`.
+2. On open, core emits **`file.open.requested`** on the event bus with `{ volume_id, path, mime_type }`.
+3. Plugin responds (RPC or cached artifact) with a **preview URL** or **transcoded stream path** — e.g. FFmpeg plugin writes `{volume}/cache/previews/{file-id}.mp4` and returns URL.
+4. Core registers a dynamic opener that delegates to the plugin response.
+
+**Example (future):** video editor plugin — user double-clicks `clip.mov` → plugin transcodes to H.264 preview → explorer plays inline. No codec support required in core.
+
+**v1 requirement:** registry API + `PreviewPanel` must accept externally registered openers without layout changes — only `registerFileOpener()` calls.
+
+#### Preview backend
+
+Extend existing content endpoint (no new route required):
+
+```
+GET /api/volumes/:id/files/content?path=...&disposition=inline|attachment
+```
+
+| Param | Default | Behavior |
+|---|---|---|
+| `disposition` | `attachment` | `inline` → `Content-Disposition: inline` for browser preview; `attachment` → download (unchanged) |
+
+Text opener fetches via authenticated `fetch(contentUrl)` — same endpoint, inline disposition.
+
+### Layout preferences (`localStorage`)
+
+Key: `lcloud.explorer.prefs.v1`
+
+```json
+{
+  "viewMode": "list",
+  "listColumns": [
+    { "id": "name", "visible": true, "width": 320, "order": 0 },
+    { "id": "size", "visible": true, "width": 100, "order": 1 },
+    { "id": "modified", "visible": true, "width": 180, "order": 2 },
+    { "id": "type", "visible": false, "width": 120, "order": 3 }
+  ],
+  "treeWidth": 240
+}
+```
+
+- **`name` column** — always visible, not hideable.
+- **Launch columns:** name, size, modified (type optional via picker).
+- Column resize: drag handle on header; reorder: drag header (list view).
+- Invalid/missing prefs → defaults above.
+
+### Inline rename
+
+| Trigger | Behavior |
+|---|---|
+| F2 | Start rename on focused row |
+| Context menu → Rename | Same |
+| Slow double-click on name | Same (300ms threshold; single click still opens folder / selects) |
+| Enter | Commit |
+| Escape | Cancel |
+
+Validation: reject empty name, `/`, `\`, `..`; trim whitespace; preserve extension on file rename optional (user can change full name). Collision → API `PATH_EXISTS` → inline error toast.
+
+### Multi-file upload (queue + max 3 parallel)
+
+- Toolbar **Upload** opens multi-select file picker.
+- Drop accepts `FileList` — **all files enter a FIFO queue** immediately (nothing is dropped or ignored).
+- **At most 3 uploads run in parallel.** When one finishes (success or error), the next **queued** file starts automatically — no user action required.
+- Example: 10 files dropped → 3 upload immediately, 7 wait; as each active slot frees, the next waiting file starts.
+
+**Per-file states in `UploadQueue` UI:**
+
+| State | Meaning |
+|---|---|
+| `queued` | Waiting for a free slot (position visible if helpful) |
+| `uploading` | Active `POST /files` in progress (progress bar) |
+| `done` | Success — dismissible row |
+| `error` | Failed — message + optional retry (re-queues at tail) |
+
+- Queue bar below toolbar: filename, state badge, progress % when uploading, error text when failed.
+- Reuse existing `POST /files` per file; no new batch endpoint in v1.
+- **Cancel** (optional v1): cancel a `queued` item removes it from the queue; cancel an `uploading` item aborts the in-flight request if the browser allows it.
+
+---
+
+## Backend
+
+### Shared file operations (`internal/volume/file_ops.go`)
+
+Extract from `macro_ops.go`:
 
 ```go
-FileMoved(ctx context.Context, event FileMovedEvent)
-// FileMovedEvent: VolumeID, FromPath, ToPath, SizeBytes
+// MoveFile moves a file within userdata; updates metadata, index, stats; emits file.moved.
+func MoveFile(ctx context.Context, deps FileOpDeps, vol *Volume, fromRel, toRel string) error
+
+// RenameEntry renames a file or directory (last path segment only).
+// Files → file.renamed. Directories → cascade metadata/index paths + file.renamed on dir path.
+func RenameEntry(ctx context.Context, deps FileOpDeps, vol *Volume, relPath, newName string) error
 ```
 
-Plugin bridge maps to `file.moved` (already defined in `internal/plugin/events.go`).
+`MacroOps.MoveFileInternal` becomes a thin wrapper calling `MoveFile`.
 
----
+**Directory rename cascade:** when renaming `photos/2024` → `photos/2024-summer`:
 
-## Event catalog (Phase 1.4 emissions)
+1. `os.Rename` on directory.
+2. Walk metadata cache records with path prefix `photos/2024/` → rewrite `RelativePath` and `Name`.
+3. For each affected file: delete old index path, index new path.
+4. Thumbnail paths unchanged (keyed by file ID, not path).
+5. Emit single `file.renamed` for the directory path change (payload: old_path, new_path, entry_type).
 
-| Event | Emitted when | Payload highlights |
-|---|---|---|
-| `task.executed` | Task run completes with `success` | `task_id`, `macro`, `volume_id`, `affected_count`, `duration_ms` |
-| `task.failed` | Task run completes with `failed` | `task_id`, `macro`, `volume_id`, `error` |
-| `file.moved` | After each successful `MoveFileInternal` | `volume_id`, `from_path`, `to_path`, `size_bytes` |
-| `volume.alert.usage` | `alert_usage` threshold exceeded | `volume_id`, `usage_percent`, `quota_bytes`, `used_bytes` |
+**Directory move (drag folder):** deferred v1 — would share cascade logic with a different API.
 
-Emit via plugin bridge after `TaskRun` persisted — same async fire-and-forget pattern as file events.
-
----
-
-## API (Phase 1.4)
+### API
 
 Base path: `/api`. All endpoints require JWT.
 
-### Tasks
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `GET` | `/tasks` | JWT | List tasks (scoped to owner; admin sees all) |
-| `POST` | `/tasks` | JWT | Create task |
-| `GET` | `/tasks/:id` | JWT | Task detail + last run summary |
-| `PATCH` | `/tasks/:id` | JWT | Update task (owner or admin) |
-| `DELETE` | `/tasks/:id` | JWT | Delete task + unregister schedule |
-| `POST` | `/tasks/:id/run` | JWT | Trigger immediate run |
-| `GET` | `/tasks/:id/runs` | JWT | Execution history |
-
-Optional query on `GET /tasks`: `volume_id` filter.
-
-#### `POST /tasks` — request example
-
-```json
-{
-  "name": "Delete old photos",
-  "macro": "delete_old_files",
-  "scope": "volume",
-  "volume_id": "660e8400-e29b-41d4-a716-446655440001",
-  "parameters": {
-    "days": 90,
-    "extensions": [".jpg", ".png", ".webp"]
-  },
-  "schedule_type": "cron",
-  "schedule": "0 2 * * 0",
-  "enabled": true
-}
-```
-
-#### `GET /tasks` — response shape
-
-```json
-{
-  "tasks": [
-    {
-      "id": "550e8400-e29b-41d4-a716-446655440000",
-      "name": "Delete old photos",
-      "macro": "delete_old_files",
-      "scope": "volume",
-      "volume_id": "660e8400-e29b-41d4-a716-446655440001",
-      "volume_name": "Photos",
-      "parameters": {"days": 90, "extensions": [".jpg", ".png", ".webp"]},
-      "schedule_type": "cron",
-      "schedule": "0 2 * * 0",
-      "schedule_description": "Every Sunday at 02:00 UTC",
-      "enabled": true,
-      "next_run_at": "2026-07-06T02:00:00Z",
-      "last_run_at": "2026-06-29T02:00:01Z",
-      "last_run_status": "success",
-      "created_at": "2026-06-01T10:00:00Z"
-    }
-  ]
-}
-```
-
-#### `GET /tasks/:id/runs`
-
-| Param | Type | Description |
+| Method | Path | Description |
 |---|---|---|
-| `limit` | int | Max entries (default 20, max 100) |
+| `GET` | `/volumes/:id/files?path=` | Unchanged — list directory |
+| `GET` | `/volumes/:id/files/content?path=&disposition=` | Extended — `inline` for preview, `attachment` (default) for download |
+| `POST` | `/volumes/:id/files` | Unchanged — upload one file |
+| `POST` | `/volumes/:id/files/directories` | Unchanged — create directory |
+| `PATCH` | `/volumes/:id/files/move` | Move file to new relative path |
+| `PATCH` | `/volumes/:id/files/rename` | Rename file or directory (same parent) |
+| `DELETE` | `/volumes/:id/files?path=` | Unchanged — delete file |
+
+#### `PATCH /volumes/:id/files/move`
 
 ```json
 {
-  "runs": [
-    {
-      "id": "...",
-      "status": "success",
-      "affected_count": 12,
-      "message": "Deleted 12 files older than 90 days",
-      "error": "",
-      "started_at": "2026-06-29T02:00:01Z",
-      "finished_at": "2026-06-29T02:00:03Z",
-      "duration_ms": 2100
-    }
-  ]
+  "from_path": "report.pdf",
+  "to_path": "documents/report.pdf"
 }
 ```
 
-#### `POST /tasks/:id/run`
+Response `200`:
 
-**Query parameters:**
+```json
+{
+  "path": "documents/report.pdf",
+  "type": "file",
+  "name": "report.pdf"
+}
+```
 
-| Param | Type | Description |
-|---|---|---|
-| `dry_run` | bool | Optional one-shot override — `true` forces simulation even if task params have `dry_run: false` |
+Rules:
 
-Returns `202 Accepted` with `{ "run_id": "..." }` when execution starts asynchronously.
+- `from_path` must be an existing **file** (not directory in v1).
+- `to_path` must not exist.
+- `to_path` parent directory created if missing (same as upload).
+- Destination must stay under `./userdata/` (PathResolver).
+- Emits `file.moved`.
 
-Poll `GET /tasks/:id/runs` or refresh task detail for result.
+#### `PATCH /volumes/:id/files/rename`
 
-**Error codes:**
+```json
+{
+  "path": "documents/report.pdf",
+  "new_name": "annual-report.pdf"
+}
+```
+
+Response `200`:
+
+```json
+{
+  "path": "documents/annual-report.pdf",
+  "type": "file",
+  "name": "annual-report.pdf"
+}
+```
+
+Rules:
+
+- `new_name` = final segment only (no slashes).
+- Works for files and directories.
+- Emits `file.renamed` (not `file.moved` — parent unchanged).
+
+**Error codes (new or reused):**
 
 | Code | Condition |
 |---|---|
-| `TASK_NOT_FOUND` | Unknown task id |
-| `INVALID_MACRO` | Unknown macro name |
-| `INVALID_PARAMETERS` | Params fail schema validation |
-| `INVALID_SCHEDULE` | Bad cron or interval |
-| `VOLUME_REQUIRED` | scope=volume without volume_id |
-| `GLOBAL_ADMIN_ONLY` | Non-admin creates global task |
-| `VOLUME_NOT_FOUND` | volume_id invalid or not accessible |
-| `TASK_ALREADY_RUNNING` | Manual run while execution in progress |
-| `TASK_DISABLED` | Manual run on a disabled task |
-| `VOLUME_TASK_BUSY` | Volume locked by another destructive macro (if OQ2 = fail fast) |
-| `FORBIDDEN` | Accessing another user's task |
+| `FILE_NOT_FOUND` | Source path missing |
+| `PATH_EXISTS` | Destination or new name already exists |
+| `INVALID_PATH` | Path traversal, empty name, invalid characters |
+| `NOT_A_FILE` | Move requested on a directory |
+| `FORBIDDEN` | User does not own volume (non-admin) |
+| `QUOTA_EXCEEDED` | N/A for move/rename (no size change) |
+
+### Event catalog (this feature)
+
+| Event | When | Payload highlights |
+|---|---|---|
+| `file.moved` | File moved to different directory | `from_path`, `to_path`, `size_bytes` |
+| `file.renamed` | File or folder renamed in place | `old_path`, `new_path`, `entry_type` (`file` \| `directory`) |
+
+Add to `volume.EventPublisher`:
+
+```go
+type FileRenamedEvent struct {
+    VolumeID  uuid.UUID
+    OldPath   string
+    NewPath   string
+    EntryType string // "file" | "directory"
+}
+```
 
 ---
 
-## Frontend (Phase 1.4)
+## Frontend
 
-Follow [design/DESIGN.md](./design/DESIGN.md): dark cards, electric yellow primary actions, status badges.
+Follow [design/DESIGN.md](./design/DESIGN.md): dark canvas, electric yellow primary actions, Inter + JetBrains Mono, hairline borders.
 
-### Routes
+### Route
 
-| Path | Access | Content |
-|---|---|---|
-| `/tasks` | Protected | Task manager (replaces placeholder) |
+| Path | Content |
+|---|---|
+| `/volumes/:id` | Redesigned explorer (replaces current layout) |
+| `/volumes/:id?path=foo/bar` | Deep-link to folder (unchanged query param) |
 
-Remove "Soon" badge from Tasks sidebar item when Phase 1.4 ships.
+### Toolbar actions
 
-### `/tasks` — Layout
+| Control | Behavior |
+|---|---|
+| **New ▾** | Dropdown: "New folder" → inline name input in pane or small dialog |
+| **Upload** | Hidden `<input type="file" multiple>` |
+| **View toggle** | List (rows icon) / Grid (grid icon); active state `text-primary` |
+| **Columns** | List view only — checkbox menu for optional columns |
 
-**Section 1 — Task list (`TaskList`):**
+### List view
 
-- Table: name, volume (linked), macro label, schedule (human-readable + UTC), enabled toggle, next run, last run status badge.
-- Actions: Run now, Edit, Delete.
-- Empty state: "No tasks yet — create one to automate volume maintenance."
-- Filter by volume (dropdown of user's volumes).
+- Sort by name (default), size, modified — client-side sort on current page listing (API sort deferred).
+- Row hover: muted background `bg-surface-elevated`.
+- Folder row: double-click opens; chevron or click name navigates.
+- File row: double-click → `resolveFileOpener(entry)` → preview panel if matched, else download (UX8/UX9).
+- **Preview panel** — slide-over or right split inside contents area; ESC closes; does not unmount tree/toolbar.
 
-**Section 2 — Create/Edit dialog (`TaskForm`):**
+### Grid view
 
-- Fields: name, volume picker (hidden for global macros), macro selector (grouped: Cleanup / Organization / Maintenance / Alerts).
-- Dynamic parameter fields per macro (`MacroParameterFields`).
-- Schedule: radio cron vs interval; cron helper presets ("Every Sunday 2am UTC", "Daily midnight UTC"); interval dropdown (1h, 6h, 24h, 7d).
-- Enabled checkbox (default on).
+- Cards with thumbnail (`ThumbnailPreview` when `has_thumbnail`) or MIME-based icon (lucide-react until iconography pass lands).
+- Folder card: folder icon, name below.
+- Same context menu and inline rename as list.
 
-**Section 3 — Run history (`TaskRunHistory`):**
+### Context menu (files and folders)
 
-- Shown inline expanded row or slide-over when selecting a task.
-- Columns: started, duration, status, affected count, message/error.
-- Success → emerald badge; failed → rose; skipped → muted; dry_run → yellow/muted "Simulation".
+| Action | Available |
+|---|---|
+| Open | Files: preview if opener exists, else download; Folders: open |
+| Download | Files only (always available) |
+| Rename | Both |
+| Delete | Files only (MVP parity — folder delete out of scope) |
 
 ### Data fetching
 
-- `useTasks(volumeId?)` — key `['tasks', volumeId]`, staleTime 15s.
-- `useTask(id)` — key `['tasks', id]`.
-- `useTaskRuns(id)` — key `['tasks', id, 'runs']`.
-- `useCreateTask`, `useUpdateTask`, `useDeleteTask`, `useRunTask` — mutations with query invalidation.
-
-### Macro labels (UI copy)
-
-| Macro | Label |
-|---|---|
-| `delete_old_files` | Delete old files |
-| `delete_large_files` | Delete large files |
-| `clear_cache` | Clear cache |
-| `move_files` | Move matching files |
-| `sort_by_type` | Sort by file type |
-| `sort_by_date` | Sort by date |
-| `rebuild_index` | Rebuild search index |
-| `compute_stats` | Recompute statistics |
-| `alert_usage` | Usage alert |
+- Existing hooks extended:
+  - `useMoveFile(volumeId)` → `PATCH .../move`, invalidate files + tree queries
+  - `useRenameFile(volumeId)` → `PATCH .../rename`, invalidate files + tree queries
+- `useExplorerPrefs()` — read/write localStorage, SSR-safe (default prefs when `window` undefined)
 
 ---
 
 ## Code Style
 
-### Go — macro registration
+### Go — FileService wrapper
 
 ```go
-// internal/task/registry.go
-type MacroFunc func(ctx context.Context, exec *Executor, vol *volume.Volume, params map[string]any) (MacroResult, error)
-
-func DefaultRegistry() map[string]MacroFunc {
-    return map[string]MacroFunc{
-        "delete_old_files":  execDeleteOldFiles,
-        "delete_large_files": execDeleteLargeFiles,
-        // ...
+func (s *FileService) Move(claims *auth.Claims, volumeID uuid.UUID, fromPath, toPath string) (*FileEntry, error) {
+    vol, err := s.volumes.Get(claims, volumeID)
+    if err != nil {
+        return nil, err
     }
+    if err := MoveFile(context.Background(), s.fileOpDeps(), vol, fromPath, toPath); err != nil {
+        return nil, err
+    }
+    return s.entryForPath(vol, toPath)
 }
 ```
 
-- Parameter parsing in dedicated `parseDeleteOldFilesParams(params)` functions — validate before side effects.
-- Return partial success: if 3 of 5 deletes fail, status `failed`, `AffectedCount=2`, `Error` summarizes first failure.
+- Auth check via `volumes.Get(claims, ...)` before any disk op.
+- Path cleaning via existing `cleanRelativePath` + `PathResolver`.
 
-### Go — scheduler registration
+### TypeScript — explorer prefs
 
-```go
-func (s *Scheduler) Register(task Task) error {
-    s.mu.Lock()
-    defer s.mu.Unlock()
-    s.unregisterLocked(task.ID)
-    if !task.Enabled {
-        return nil
-    }
-    jobFn := func() { s.service.executeTask(context.Background(), task.ID) }
-    switch task.ScheduleType {
-    case "cron":
-        _, err := s.cron.NewJob(gocron.CronJob(task.Schedule, false), gocron.NewTask(jobFn))
-        return err
-    case "interval":
-        d, err := time.ParseDuration(task.Schedule)
-        if err != nil { return err }
-        _, err = s.cron.NewJob(gocron.DurationJob(d), gocron.NewTask(jobFn))
-        return err
-    }
-    return ErrInvalidSchedule
+```typescript
+const STORAGE_KEY = "lcloud.explorer.prefs.v1";
+
+export function loadExplorerPrefs(): ExplorerPrefs {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return DEFAULT_PREFS;
+    return { ...DEFAULT_PREFS, ...JSON.parse(raw) };
+  } catch {
+    return DEFAULT_PREFS;
+  }
 }
 ```
 
-### TypeScript
+- Prefer hooks over prop drilling for `currentPath` / `viewMode`.
+- DnD kit: separate sensors for pointer + keyboard where feasible.
 
-- Macro selector drives conditional form fields — no single mega-form with booleans.
-- Cron preset buttons fill the schedule input; advanced users can edit raw cron.
-- Confirm dialog before Run now on destructive macros (when `dry_run` is false).
-- Dry-run checkbox visible only for destructive macros; helper text: "Aucun fichier ne sera modifié — prévisualisation uniquement."
+### TypeScript — file opener registration
+
+```typescript
+registerFileOpener({
+  id: "core.image",
+  label: "Image preview",
+  priority: 100,
+  canOpen: (entry) => entry.mime_type?.startsWith("image/") ?? false,
+  open: ({ contentUrl }, panel) => {
+    panel.render(<img src={contentUrl} alt="" className="max-h-full max-w-full object-contain" />);
+  },
+});
+```
+
+- Built-in openers live in `web/src/lib/fileOpeners/`; each calls `registerFileOpener` on import.
+- `VolumeExplorer` imports `./fileOpeners` side-effect bundle once at startup.
 
 ---
 
@@ -719,24 +624,26 @@ See [docs/project.md — Coverage targets](./docs/project.md#coverage-targets).
 
 | Layer | Focus | Location |
 |---|---|---|
-| Backend unit | Parameter validation per macro | `internal/task/macros_test.go` |
-| Backend unit | Cron/interval parsing, next_run computation | `internal/task/scheduler_test.go` |
-| Backend unit | Macro registry dispatches correctly | `internal/task/executor_test.go` |
-| Backend integration | `delete_old_files` on temp volume dir | `internal/task/executor_test.go` |
-| Backend integration | `MoveFileInternal` updates metadata + index | `internal/volume/macro_ops_test.go` |
-| Backend integration | Task API CRUD + authorization | `internal/api/task_handler_test.go` |
-| Backend integration | Manual run creates TaskRun, emits events (mock publisher) | `internal/task/service_test.go` |
-| Frontend unit | TaskList, TaskForm macro switching, ScheduleFields | `web/src/components/tasks/*.test.tsx` |
+| Backend unit | Move file happy path, collision, not found | `internal/volume/file_ops_test.go` |
+| Backend unit | Rename file + rename directory cascade | `internal/volume/file_ops_test.go` |
+| Backend integration | Move/rename API auth + error codes | `internal/api/file_handler_test.go` |
+| Backend integration | Events emitted (mock publisher) | `internal/volume/file_ops_test.go` |
+| Frontend unit | Explorer prefs load/save defaults | `useExplorerPrefs.test.ts` |
+| Frontend unit | InlineRename commit/cancel/validation | `InlineRename.test.tsx` |
+| Frontend unit | Toolbar view toggle persists | `ExplorerToolbar.test.tsx` |
+| Frontend unit | Opener registry priority + fallback | `registry.test.ts` |
+| Frontend unit | Text opener size cap / PDF/image match | `*Opener.test.ts` |
+| Backend integration | `disposition=inline` Content-Disposition | `file_handler_test.go` |
+| Manual | UX1–UX9 checklist in browser | See Success Criteria |
 
-**Coverage target:** 80% minimum on `internal/task/`.
+**Coverage target:** 80% minimum on new `file_ops.go` paths.
 
 **Verify before ship:**
 
 ```bash
-go test ./internal/task/... -cover
-go test ./...
-cd web && npm run test
-# Manual UC4.1 – UC4.2 via UI + curl script above
+go test ./internal/volume/... ./internal/api/... -cover
+cd web && npm run test && npm run build
+# Manual: drag upload, drag move, F2 rename, tree navigation, prefs persist after reload
 ```
 
 ---
@@ -745,78 +652,86 @@ cd web && npm run test
 
 ### Always
 
-- All disk mutations go through `internal/volume/` — macros in `task/` orchestrate, never `os.Remove` on userdata directly.
-- `rebuild_index` uses `VolumeIndexer` interface only — never import Bleve from `task/`.
-- Task CRUD validates macro name against closed catalog before save.
-- Scheduled runs and manual runs share the same `executeTask` path.
-- Emit `task.executed` / `task.failed` on every completed run.
-- Write ADR in `docs/adr/` before merge.
-- Follow [design/DESIGN.md](./design/DESIGN.md) for Tasks UI.
-- On task delete, unregister gocron job and cancel in-flight run gracefully if possible.
+- All disk mutations through `internal/volume/` — handlers stay thin.
+- Index updates via `VolumeIndexer` interface only.
+- Emit `file.moved` / `file.renamed` on successful web move/rename.
+- Follow [design/DESIGN.md](./design/DESIGN.md) for all new UI.
+- Layout prefs in `localStorage` for v1 — no PostgreSQL prefs table.
+- Preserve `?path=` deep-link behavior.
+- Write ADR for web move/rename API before merge.
 
 ### Ask first
 
-- Adding macros outside the predefined list.
-- Event-triggered tasks (non-schedule triggers).
-- Macro ability to delete directories or entire volume trees.
-- Changing task history retention policy significantly.
-- Exposing server local timezone for cron.
+- Adding npm dependencies beyond `@dnd-kit/*`, shadcn menu primitives, and a PDF renderer if iframe preview is insufficient on target browsers.
+- Folder delete API (currently files only).
+- Directory drag-move (cascade move).
+- Server-side preference storage.
+- Batch upload API (multi-part single request).
 
 ### Never
 
-- User-defined script/code execution in tasks.
-- Direct Bleve calls from outside `internal/indexer/`.
-- Bypass volume quota checks during macro deletes (usage must stay consistent).
-- Store task definitions in `.volume.json` — PostgreSQL only (volume portability unaffected).
-- Block plugin event delivery on task failure.
-- Change `.volume.json` schema or volume directory structure.
+- Change `.volume.json` schema or volume directory structure without ADR.
+- Call Bleve directly outside `internal/indexer/`.
+- Bypass auth in web move/rename (unlike macro internal ops — web always checks JWT).
+- Add FTP/WebDAV/sync UI in this feature.
+- Remove permanent delete without Trash feature shipped.
 
 ---
 
 ## Success Criteria
 
-Phase 1.4 is **done** when all of the following pass — **MVP reached**:
+Explorer redesign is **done** when all of the following pass:
 
-- [ ] **SC4.1** gocron v2 integrated; enabled tasks loaded and scheduled at startup
-- [ ] **SC4.2** Task CRUD API with owner scoping; admin sees all tasks
-- [ ] **SC4.3** Cron and interval schedule types validated; `next_run_at` exposed in API
-- [ ] **SC4.4** All 9 predefined macros implemented with parameter validation
-- [ ] **SC4.5** `delete_old_files` deletes by age; respects optional extension filter (UC4.1)
-- [ ] **SC4.6** Manual run via `POST /tasks/:id/run` works (UC4.2)
-- [ ] **SC4.6b** Dry-run on destructive macro returns status `dry_run`, correct `affected_count`, zero disk changes
-- [ ] **SC4.6c** `POST /tasks/:id/run?dry_run=true` one-shot override works
-- [ ] **SC4.7** Task history records status, affected count, duration, error message
-- [ ] **SC4.8** Enable/disable toggles gocron registration without server restart
-- [ ] **SC4.9** `move_files`, `sort_by_type`, `sort_by_date` emit `file.moved` per file
-- [ ] **SC4.10** `rebuild_index` rebuilds Bleve from metadata cache
-- [ ] **SC4.11** `compute_stats` refreshes monitoring stats cache
-- [ ] **SC4.12** `clear_cache` wipes thumbnails + metadata only (not Bleve)
-- [ ] **SC4.13** `alert_usage` emits `volume.alert.usage` when threshold exceeded
-- [ ] **SC4.14** `task.executed` and `task.failed` emitted on bus after each run
-- [ ] **SC4.15** UI: create task on a volume with cron schedule (UC4.1)
-- [ ] **SC4.16** UI: run history shows deleted file count after execution (UC4.2)
-- [ ] **SC4.17** UI: Tasks sidebar active without "Soon" badge
-- [ ] **SC4.18** ADR documents task system and macro vocabulary
-- [ ] **SC4.19** `go test ./...` and `cd web && npm run test` pass
+- [ ] **SC-EX1** `/volumes/:id` shows sidebar tree + toolbar + contents pane (no permanent upload banner, no always-visible folder form)
+- [ ] **SC-EX2** Lazy tree loads children on expand; selecting node updates contents pane
+- [ ] **SC-EX3** Breadcrumb + tree selection stay in sync with `currentPath`
+- [ ] **SC-EX4** Drop external files onto contents pane enqueues all files; max 3 parallel, rest wait in FIFO queue with visible states (UX2)
+- [ ] **SC-EX5** **New → Folder** creates directory without permanent form (UX3)
+- [ ] **SC-EX6** List/grid toggle works; preference survives page reload (UX6)
+- [ ] **SC-EX7** List columns: name (fixed), size, modified launch visible; user can show/hide type; resize + reorder persist (UX7)
+- [ ] **SC-EX8** Inline rename via F2, context menu, slow double-click — files and folders (UX4)
+- [ ] **SC-EX9** Drag file onto folder (tree or list) moves file via API (UX5)
+- [ ] **SC-EX10** `PATCH .../move` and `PATCH .../rename` API with auth, validation, tests
+- [ ] **SC-EX11** `file.moved` emitted on move; `file.renamed` emitted on rename (plugin bridge wired)
+- [ ] **SC-EX12** Directory rename cascades metadata + Bleve index paths
+- [ ] **SC-EX13** ADR documents web file ops API
+- [ ] **SC-EX14** `go test ./...` and `cd web && npm run test && npm run build` pass
+- [ ] **SC-EX15** Double-click PDF, text, and image opens in `PreviewPanel` without page navigation (UX8)
+- [ ] **SC-EX16** Double-click unsupported type downloads; context menu **Open** follows same resolver (UX9)
+- [ ] **SC-EX17** `GET /files/content?disposition=inline` serves inline Content-Disposition for preview
+- [ ] **SC-EX18** `FileOpener` registry accepts a third-party registration without explorer layout changes (manual stub test)
+
+---
+
+## Follow-up slice (v1.1)
+
+Optional fast-follow — not blocking v1 ship:
+
+- Multi-select (Shift/Cmd click) + bulk delete + bulk download
+- Keyboard shortcuts cheat sheet (`?`)
+- Coordinate with [IDEAS.md — Iconography pass](./IDEAS.md) for MIME/disk icons in grid view
+- **Plugin-backed openers** — `file.open.requested` bus flow + dynamic registration (video/FFmpeg preview)
 
 ---
 
 ## Implementation order (preview for `/plan`)
 
-Suggested vertical slices — `/plan` will expand into `tasks/plan.md`:
+Suggested vertical slices:
 
-1. **ADR draft** — task model, gocron choice, macro vocabulary contract
-2. **PostgreSQL models** — Task, TaskRun; migrate in main
-3. **Macro parameter schemas + validation**
-4. **volume.MacroOps** — DeleteFileInternal, MoveFileInternal + tests
-5. **EventPublisher extension** — FileMoved, task events in plugin bridge
-6. **Macro executor + registry** — implement all 9 macros
-7. **Task service** — CRUD, executeTask, history, concurrency locks
-8. **gocron scheduler** — register/unregister, startup/shutdown wiring
-9. **Task API handlers** — routes in router
-10. **main.go wiring** — task service deps, scheduler start
-11. **Frontend TasksPage** — list, form, history, run now
-12. **Integration** — Docker end-to-end UC4.1–UC4.2
+1. **ADR draft** — web move/rename API, event semantics
+2. **Backend `file_ops.go`** — extract MoveFile, RenameEntry; refactor MacroOps; tests
+3. **FileRenamed event** — publisher + plugin bridge
+4. **FileService + API handlers** — PATCH routes, error codes, handler tests
+5. **Frontend prefs hook** — localStorage schema + defaults
+6. **Explorer shell** — layout, toolbar, tree (lazy), breadcrumb wiring
+7. **List view** — columns, resize/reorder, context menu
+8. **Grid view** — thumbnails + icons
+9. **Inline rename** — UI + API integration
+10. **DnD move** — internal file drag to folder targets
+11. **Multi-file upload queue** — replace UploadZone
+12. **File opener registry + PreviewPanel** — PDF, text, image; inline content disposition
+13. **VolumeDetailPage cleanup** — remove old components
+14. **Manual UX1–UX9 pass** — browser verification
 
 ---
 
@@ -824,20 +739,21 @@ Suggested vertical slices — `/plan` will expand into `tasks/plan.md`:
 
 | # | Decision | Status |
 |---|---|---|
-| D1 | gocron v2 in-process scheduler | ✅ Proposed |
-| D2 | Task definitions in PostgreSQL only | ✅ Proposed |
-| D3 | Cron in UTC | ✅ Proposed |
-| D4 | Internal MacroOps in volume package for disk mutations | ✅ Proposed |
-| D5 | `rebuild_index` sources files from metadata cache | ✅ Proposed |
-| D6 | `clear_cache` excludes Bleve index | ✅ Proposed |
-| D7 | Sort macros only move files at userdata root (non-recursive) | ✅ Proposed |
-| D8 | Global scope admin-only; limited macros | ✅ Proposed |
-| D9 | Manual run in MVP (async 202) | ✅ Proposed |
-| D10 | Task run retention: 200 per task | ✅ Proposed |
-| D11 | `file.moved` first emitted by Phase 1.4 move macros | ✅ Proposed |
-| D12 | Dry-run mode on destructive macros in MVP | ✅ Resolved (OQ1 — operator choice) |
-| D13 | Volume busy: fail fast (OQ2) | ✅ Resolved |
-| D14 | Minimum schedule interval: 1 minute (OQ3) | ✅ Resolved |
+| D1 | Drive/Explorer hybrid layout with lazy sidebar tree | ✅ From IDEAS.md |
+| D2 | List + grid views; prefs in localStorage v1 | ✅ From IDEAS.md |
+| D3 | Customizable list columns (name required) | ✅ From IDEAS.md |
+| D4 | Inline rename files + folders | ✅ From IDEAS.md |
+| D5 | Drag file → folder move (not folder drag) | ✅ Proposed v1 scope |
+| D6 | Multi-file upload on contents pane drop | ✅ Proposed (IDEAS dependency) |
+| D7 | Unified `file_ops.go` shared by FileService + MacroOps | ✅ Proposed |
+| D8 | `file.renamed` when parent unchanged; `file.moved` when directory changes | ✅ Proposed |
+| D9 | No new tree API — reuse list per path | ✅ Proposed |
+| D10 | Bulk multi-select deferred to v1.1 | ✅ Proposed |
+| D11 | `@dnd-kit/core` + `@dnd-kit/utilities` for DnD | ✅ Resolved (OQ1 — operator) |
+| D12 | Double-click → preview via opener registry; PDF + text + image in v1 | ✅ Resolved (OQ2 — operator) |
+| D13 | Video/audio preview via plugins later (FFmpeg example); not in core v1 | ✅ Resolved (OQ2 — operator) |
+| D14 | `FileOpener` registry is the stable extension point for new types | ✅ Proposed |
+| D15 | Upload queue: max 3 parallel, FIFO for remaining files | ✅ Resolved (OQ3 — operator) |
 
 ---
 
@@ -845,98 +761,46 @@ Suggested vertical slices — `/plan` will expand into `tasks/plan.md`:
 
 | # | Question | Status |
 |---|---|---|
-| OQ1 | **Destructive macro dry-run mode** | ✅ Resolved — included in MVP |
-| OQ2 | **Volume busy policy** | ✅ Resolved — fail fast (`VOLUME_TASK_BUSY`, status `skipped`) |
-| OQ3 | **Minimum interval for scheduled tasks** | ✅ Resolved — 1 minute minimum |
+| OQ1 | **Drag-and-drop library** | ✅ Resolved — `@dnd-kit/core` + `@dnd-kit/utilities` |
+| OQ2 | **Double-click on file** — download vs preview | ✅ Resolved — opener registry; PDF/text/image in v1; fallback download |
+| OQ3 | **Upload concurrency limit** | ✅ Resolved — max 3 parallel + FIFO queue for overflow |
+| OQ4 | **Server-side layout prefs** | ✅ Deferred post-v1 (IDEAS.md) |
 
-### OQ1 — Dry-run mode ✅ Resolved
+### OQ1 — Drag-and-drop library ✅ Resolved
 
-**Decision:** Dry-run **included in MVP** (operator request).
-
-Destructive macros accept `dry_run: true`. See [Dry-run mode (MVP)](#dry-run-mode-mvp) for full behavior.
-
----
-
-### OQ2 — Volume busy policy
-
-**Contexte — pourquoi cette question existe**
-
-Une macro destructive (suppression, déplacement, vidage cache) lit et modifie des fichiers pendant plusieurs secondes ou minutes. Si deux macros de ce type s'exécutent **en même temps sur le même volume**, elles peuvent se marcher dessus : double suppression, déplacement vers un chemin déjà pris, compteur d'espace disque incohérent.
-
-lcloud pose donc un **verrou par volume** pendant toute la durée d'une exécution destructive réelle (`dry_run: false`). La question est : que fait-on quand une deuxième tâche destructive arrive alors que le verrou est déjà pris ?
-
-**Ce qui ne change pas (quel que soit le choix)**
-
-| Situation | Comportement |
-|---|---|
-| Deux tâches sur **des volumes différents** | Aucun conflit — exécution en parallèle |
-| Tâche destructive + tâche non destructive (`compute_stats`, etc.) sur le **même** volume | Pas de blocage — les macros maintenance/alerte peuvent tourner en parallèle |
-| Deux dry-runs sur le même volume | Pas de verrou — lectures seulement |
-| Même tâche déclenchée deux fois (cron + clic « Exécuter ») | La deuxième est ignorée — statut `skipped`, message « already running » |
-
-**Scénarios concrets à trancher**
-
-| Scénario | Option A — Échec immédiat | Option B — File d'attente |
-|---|---|---|
-| Dimanche 2h00 : tâche planifiée « supprimer vieux fichiers » démarre. À 2h01 tu cliques « Exécuter maintenant » sur une autre tâche « tri par date » sur le **même** volume | La 2e run se termine tout de suite avec statut `skipped` et message « volume occupé ». Tu relances manuellement plus tard. | La 2e run **attend** que la 1re finisse, puis s'exécute automatiquement (peut démarrer à 2h05 si la 1re a duré 4 min). |
-| Deux tâches planifiées au **même** créneau cron sur le même volume | La 2e est `skipped` ; visible dans l'historique avec horodatage. | La 2e démarre dès que la 1re libère le verrou — ordre d'arrivée respecté. |
-| Tâche longue (tri de 10 000 fichiers) + 3e déclenchement pendant l'attente (option B) | N/A | Risque de **chaîne d'attente** : la 3e attend la 2e qui attend la 1re ; une run peut démarrer très tard. |
-
-**Impact utilisateur**
-
-| | Option A — Échec immédiat | Option B — File d'attente |
-|---|---|---|
-| Prévisibilité | ✅ Tu sais tout de suite que ça n'a pas tourné | ⚠️ Tu peux croire que rien ne se passe alors qu'une run est en attente |
-| Simplicité technique | ✅ Pas de goroutine bloquée, pas de timeout à gérer | ⚠️ Faut définir un timeout max d'attente (ex. 30 min) sinon run fantôme |
-| Cas d'usage homelab | Rare d'avoir 2 tâches destructives qui se chevauchent | Utile si tu empiles plusieurs automatisations sur un gros volume |
-
-**Recommandation :** Option A — échec immédiat (`VOLUME_TASK_BUSY`, statut `skipped`). Les chevauchements sont rares en homelab ; un échec explicite dans l'historique est plus clair qu'une exécution retardée de plusieurs minutes.
+**Decision:** `@dnd-kit/core` + `@dnd-kit/utilities` (operator approval).
 
 ---
 
-### OQ3 — Intervalle minimum entre exécutions planifiées
+### OQ2 — Double-click / file open ✅ Resolved
 
-**Contexte — pourquoi cette question existe**
+**Decision:** In-explorer preview via **`FileOpener` registry**.
 
-En plus du cron (ex. « tous les dimanches à 2h »), lcloud accepte des tâches en **intervalle fixe** (ex. « toutes les 24h »). gocron peut théoriquement aller jusqu'à **1 seconde**. Sur du matériel self-hosted (NAS, Raspberry Pi, VPS modeste), un intervalle trop court peut :
+| Scope | Types | Behavior |
+|---|---|---|
+| **v1 built-in** | PDF, text (`text/*` + common extensions), images (`image/*`) | Open in `PreviewPanel` inside explorer |
+| **v1 fallback** | Everything else | Download on double-click |
+| **Post-v1 plugins** | e.g. `video/*` via FFmpeg transcode | Plugin registers opener; core explorer unchanged |
 
-- solliciter le disque en continu (`compute_stats`, `rebuild_index`) ;
-- rallonger les uploads pendant qu'une macro tourne ;
-- consommer CPU/RAM si plusieurs volumes ont chacun une tâche fréquente.
+Registry + `PreviewPanel` ship in v1 so plugins only add handlers — no second explorer redesign.
 
-Cette question ne concerne **que** `schedule_type: interval`. Le cron a sa propre granularité (minimum **1 minute** entre deux déclenchements si l'expression le permet — ex. `*/1 * * * *`).
+---
 
-**Macros les plus sensibles à un intervalle court**
+### OQ3 — Upload concurrency limit ✅ Resolved
 
-| Macro | Charge si intervalle agressif |
+**Decision:** Max **3 uploads in parallel**. Additional files are **queued (FIFO)** — not rejected, not uploaded all at once.
+
+| Behavior | Detail |
 |---|---|
-| `rebuild_index` | 🔴 Élevée — parcourt tout le metadata cache + réécrit Bleve |
-| `compute_stats` | 🟠 Moyenne — lit tous les metadata |
-| `delete_old_files` / `sort_*` | 🟠 Variable — dépend du nombre de fichiers |
-| `alert_usage` | 🟢 Faible — une lecture de quota |
-
-**Options**
-
-| Option | Minimum autorisé | Conséquence |
-|---|---|---|
-| **A — 1 minute** | `schedule: "1m"` | Tu peux rafraîchir les stats quasi en temps réel ; doc avertit sur la charge disque |
-| **B — 15 minutes** | `schedule: "15m"` | Limite les abus accidentels (« j'ai mis 1m au lieu de 1h ») ; stats moins fraîches |
-| **C — 1 heure** | `schedule: "1h"` | Très conservateur ; alertes usage et stats au plus hourly |
-
-**Presets UI proposés (indépendamment du minimum)**
-
-| Preset | Valeur | Usage typique |
-|---|---|---|
-| Hourly | `1h` | `alert_usage`, `compute_stats` |
-| Daily | `24h` | maintenance légère |
-| Weekly | `168h` | nettoyage |
-
-Le minimum s'applique si l'utilisateur saisit un intervalle custom (ex. `5m` refusé si minimum = 15m → erreur `INVALID_SCHEDULE` avec message explicite).
-
-**Recommandation :** Option A — **1 minute**. Cible homelab expérimentée ; l'avertissement dans l'UI suffit. Cron et intervalle partagent la même granularité minimale (1 min) pour rester cohérent.
+| Parallel cap | 3 active `POST /files` at any time |
+| Overflow | Files 4+ wait in queue until a slot opens |
+| Order | First dropped/selected → first uploaded (FIFO) |
+| On complete | Next queued file starts automatically |
 
 ---
 
 ## Next step
 
-Post-MVP features start with `/spec` on a feature description. Park raw ideas in IDEAS.md first when scope is unclear.
+1. All OQ resolved — spec ready for `/plan`.  
+2. On approval → `/plan` to produce `tasks/plan.md` and `tasks/todo.md`.  
+3. On build → ADR in `docs/adr/` before merge (file ops API + file opener extension model).
