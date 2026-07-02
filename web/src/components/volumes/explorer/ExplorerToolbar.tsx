@@ -1,24 +1,12 @@
 import { useRef } from "react";
 import { FolderPlus, Grid3X3, List, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuItem,
-} from "@/components/ui/dropdown-menu";
-import type { ColumnId, ExplorerPrefs, ViewMode } from "@/hooks/useExplorerPrefs";
-
-const COLUMN_LABELS: Record<ColumnId, string> = {
-  name: "Name",
-  size: "Size",
-  modified: "Modified",
-  type: "Type",
-};
+import { DropdownMenu, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import type { ExplorerPrefs, ViewMode } from "@/hooks/useExplorerPrefs";
 
 type ExplorerToolbarProps = {
   prefs: ExplorerPrefs;
   onViewModeChange: (mode: ViewMode) => void;
-  onColumnToggle: (id: ColumnId, visible: boolean) => void;
   onNewFolder: () => void;
   onUpload: (files: FileList) => void;
 };
@@ -26,7 +14,6 @@ type ExplorerToolbarProps = {
 export function ExplorerToolbar({
   prefs,
   onViewModeChange,
-  onColumnToggle,
   onNewFolder,
   onUpload,
 }: ExplorerToolbarProps) {
@@ -77,20 +64,6 @@ export function ExplorerToolbar({
         >
           <Grid3X3 className="h-4 w-4" />
         </Button>
-
-        {prefs.viewMode === "list" ? (
-          <DropdownMenu trigger={<Button variant="outline">Columns</Button>} align="right">
-            {prefs.listColumns.map((column) => (
-              <DropdownMenuCheckboxItem
-                key={column.id}
-                checked={column.visible}
-                label={COLUMN_LABELS[column.id]}
-                disabled={column.id === "name"}
-                onCheckedChange={(checked) => onColumnToggle(column.id, checked)}
-              />
-            ))}
-          </DropdownMenu>
-        ) : null}
       </div>
     </div>
   );

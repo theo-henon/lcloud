@@ -240,6 +240,21 @@ Strategic shifts (new audience, new deployment model) → **VISION.md**, not IDE
 
 ---
 
+### Explorer grid — single-click vs double-click interaction
+**Context:** Volume explorer redesign (shipped) opens folders and files on **double-click** in grid and list views. Single click on a grid card only shows hover styling — no selection state, no open. Operator feedback (2026-07-02): interaction should feel more responsive; either **single-click** (select or open) or **double-click** should clearly drive the primary action, aligned with desktop/cloud habits (Explorer: select on click, open on double-click; some products: single-click open in grid).
+**Value:** Less friction in grid view — users know what one click vs two clicks do; optional path to single-click-open for touch/simple workflows without breaking power-user double-click.
+**Estimated effort:** Quick
+**Dependencies:** Volume explorer redesign (shipped); optional tie-in to **Multi-file selection and bulk actions** if single-click = select
+**Date:** 2026-07-02
+
+**Possible scope (post-MVP `/spec`):**
+- **Default (desktop):** single-click selects (visual highlight); double-click opens folder or preview
+- **Alternative or setting:** single-click opens in grid view (Drive-style); double-click still works
+- Consistent behavior between list and grid; document choice in explorer prefs (localStorage)
+- Out of scope: touch-only long-press menus (separate mobile pass)
+
+---
+
 ### Monitoring dashboard — visual upgrade
 **Context:** MVP monitoring (`/monitoring`) shows disk cards, a volume table, and per-volume stats (used/quota, category bars, top MIME types). All usage bars use the same primary yellow — no color signal when a quota is nearly full. Data is **snapshot-only** (stats cache per volume, no history over time). The `alert_usage` task can fire on the event bus when a threshold is exceeded, but the monitoring UI does not surface alert state or tie into a notification center yet.
 **Value:** Understand disk and volume health at a glance: colored quota bars (green → yellow → red), charts for file-type breakdown, and optional trends so operators see problems before uploads fail — without reading raw numbers.

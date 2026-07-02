@@ -19,7 +19,7 @@ import { UploadQueue } from "@/components/volumes/explorer/UploadQueue";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { useExplorerPrefs, visibleColumns, type ColumnId } from "@/hooks/useExplorerPrefs";
+import { useExplorerPrefs, type ColumnId } from "@/hooks/useExplorerPrefs";
 import { useUploadQueue } from "@/hooks/useUploadQueue";
 import {
   useCreateDirectory,
@@ -173,7 +173,17 @@ export function VolumeExplorer({ volumeId, currentPath, onPathChange }: VolumeEx
   );
 
   const entries = filesQuery.data?.entries ?? [];
-  const columns = visibleColumns(prefs);
+
+  const handleColumnToggle = useCallback(
+    (id: ColumnId, visible: boolean) =>
+      setPrefs((prev) => ({
+        ...prev,
+        listColumns: prev.listColumns.map((column) =>
+          column.id === id ? { ...column, visible } : column,
+        ),
+      })),
+    [setPrefs],
+  );
 
   return (
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
@@ -188,14 +198,6 @@ export function VolumeExplorer({ volumeId, currentPath, onPathChange }: VolumeEx
           <ExplorerToolbar
             prefs={prefs}
             onViewModeChange={(viewMode) => setPrefs((prev) => ({ ...prev, viewMode }))}
-            onColumnToggle={(id: ColumnId, visible) =>
-              setPrefs((prev) => ({
-                ...prev,
-                listColumns: prev.listColumns.map((column) =>
-                  column.id === id ? { ...column, visible } : column,
-                ),
-              }))
-            }
             onNewFolder={() => setShowNewFolder(true)}
             onUpload={(files) => enqueueFiles(files, currentPath)}
           />
@@ -267,7 +269,8 @@ export function VolumeExplorer({ volumeId, currentPath, onPathChange }: VolumeEx
                 <FileListView
                   volumeId={volumeId}
                   entries={entries}
-                  columns={columns}
+                  listColumns={prefs.listColumns}
+                  onColumnToggle={handleColumnToggle}
                   renamingPath={renamingPath}
                   onOpenDirectory={onPathChange}
                   onOpenEntry={(entry) => void handleOpenEntry(entry)}

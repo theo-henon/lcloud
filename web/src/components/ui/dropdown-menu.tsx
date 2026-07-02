@@ -6,9 +6,10 @@ type DropdownMenuProps = {
   trigger: ReactNode;
   children: ReactNode;
   align?: "left" | "right";
+  disabled?: boolean;
 };
 
-export function DropdownMenu({ trigger, children, align = "left" }: DropdownMenuProps) {
+export function DropdownMenu({ trigger, children, align = "left", disabled }: DropdownMenuProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -25,9 +26,23 @@ export function DropdownMenu({ trigger, children, align = "left" }: DropdownMenu
     return () => document.removeEventListener("mousedown", onClick);
   }, [open]);
 
+  useEffect(() => {
+    if (disabled) {
+      setOpen(false);
+    }
+  }, [disabled]);
+
   return (
     <div ref={rootRef} className="relative inline-block">
-      <div onClick={() => setOpen((value) => !value)}>{trigger}</div>
+      <div
+        onClick={() => {
+          if (!disabled) {
+            setOpen((value) => !value);
+          }
+        }}
+      >
+        {trigger}
+      </div>
       {open ? (
         <div
           className={cn(

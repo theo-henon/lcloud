@@ -3,6 +3,13 @@ import { useCallback, useEffect, useState } from "react";
 export type ColumnId = "name" | "size" | "modified" | "type";
 export type ViewMode = "list" | "grid";
 
+export const COLUMN_LABELS: Record<ColumnId, string> = {
+  name: "Name",
+  size: "Size",
+  modified: "Modified",
+  type: "Type",
+};
+
 export type ListColumnPref = {
   id: ColumnId;
   visible: boolean;
@@ -71,8 +78,12 @@ export function useExplorerPrefs() {
   return { prefs, setPrefs };
 }
 
-export function visibleColumns(prefs: ExplorerPrefs): ListColumnPref[] {
-  return [...prefs.listColumns]
+export function visibleListColumns(listColumns: ListColumnPref[]): ListColumnPref[] {
+  return [...listColumns]
     .filter((col) => col.visible)
     .sort((a, b) => a.order - b.order);
+}
+
+export function visibleColumns(prefs: ExplorerPrefs): ListColumnPref[] {
+  return visibleListColumns(prefs.listColumns);
 }

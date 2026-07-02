@@ -5,14 +5,17 @@ import { File, Folder } from "lucide-react";
 import { ContextMenuItem } from "@/components/ui/context-menu";
 import { ThumbnailPreview } from "@/components/volumes/ThumbnailPreview";
 import { InlineRename } from "@/components/volumes/explorer/InlineRename";
-import type { ListColumnPref } from "@/hooks/useExplorerPrefs";
+import { ListColumnHeader } from "@/components/volumes/explorer/ListColumnPicker";
+import type { ColumnId, ListColumnPref } from "@/hooks/useExplorerPrefs";
+import { visibleListColumns } from "@/hooks/useExplorerPrefs";
 import type { FileEntry } from "@/lib/api";
 import { cn, formatBytes } from "@/lib/utils";
 
 type FileListViewProps = {
   volumeId: string;
   entries: FileEntry[];
-  columns: ListColumnPref[];
+  listColumns: ListColumnPref[];
+  onColumnToggle: (id: ColumnId, visible: boolean) => void;
   renamingPath: string | null;
   onOpenDirectory: (path: string) => void;
   onOpenEntry: (entry: FileEntry) => void;
@@ -170,7 +173,8 @@ export function FileListView(props: FileListViewProps) {
   const {
     volumeId,
     entries,
-    columns,
+    listColumns,
+    onColumnToggle,
     renamingPath,
     onOpenDirectory,
     onOpenEntry,
@@ -180,6 +184,8 @@ export function FileListView(props: FileListViewProps) {
     onRenameCommit,
     onRenameCancel,
   } = props;
+
+  const columns = visibleListColumns(listColumns);
 
   if (entries.length === 0) {
     return (
@@ -192,20 +198,8 @@ export function FileListView(props: FileListViewProps) {
   return (
     <div className="overflow-hidden rounded-lg border border-hairline">
       <table className="min-w-full divide-y divide-hairline">
-        <thead className="bg-surface-soft">
-          <tr>
-            {columns.map((column) => (
-              <th
-                key={column.id}
-                className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted"
-                style={{ width: column.width }}
-              >
-                {column.id}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-hairline bg-surface-card">
+        <ListColumnHeader listColumns={listColumns} onColumnToggle={onColumnToggle} />
+          <tbody className="divide-y divide-hairline bg-surface-card">
           {entries.map((entry) => (
             <RowContextMenu
               key={entry.path}
@@ -244,6 +238,7 @@ export function FileListView(props: FileListViewProps) {
                         )}
                       </td>
                     ))}
+                    <td className="w-10" aria-hidden />
                   </Row>
                 );
               }}

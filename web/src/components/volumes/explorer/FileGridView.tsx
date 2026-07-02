@@ -8,6 +8,12 @@ import { InlineRename } from "@/components/volumes/explorer/InlineRename";
 import type { FileEntry } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
+const GRID_CARD_CLASS =
+  "group rounded-lg border border-hairline bg-surface-card p-3 transition-all duration-150 hover:border-primary hover:bg-surface-elevated active:scale-[0.98] active:border-primary active:bg-surface-soft";
+
+const GRID_PREVIEW_CLASS =
+  "mb-3 flex h-24 items-center justify-center rounded-md bg-surface-soft transition-colors group-hover:bg-surface-card group-active:bg-surface-elevated";
+
 type FileGridViewProps = {
   volumeId: string;
   entries: FileEntry[];
@@ -37,8 +43,9 @@ function GridCard({
       <div
         ref={setNodeRef}
         className={cn(
-          "rounded-lg border border-hairline bg-surface-card p-3",
-          isOver && "ring-2 ring-primary",
+          GRID_CARD_CLASS,
+          "cursor-pointer",
+          isOver && "scale-[1.02] border-primary bg-surface-elevated ring-2 ring-inset ring-primary",
         )}
       >
         {children}
@@ -58,7 +65,11 @@ function GridCard({
     <div
       ref={setNodeRef}
       style={style}
-      className="rounded-lg border border-hairline bg-surface-card p-3"
+      className={cn(
+        GRID_CARD_CLASS,
+        "cursor-grab active:cursor-grabbing",
+        isDragging && "scale-95 opacity-50",
+      )}
       {...listeners}
       {...attributes}
     >
@@ -107,13 +118,13 @@ export function FileGridView({
                 }
               }}
             >
-              <div className="mb-3 flex h-24 items-center justify-center rounded bg-surface-soft">
+              <div className={GRID_PREVIEW_CLASS}>
                 {entry.type === "directory" ? (
-                  <Folder className="h-10 w-10 text-primary" />
+                  <Folder className="h-10 w-10 text-primary transition-transform duration-150 group-hover:scale-110" />
                 ) : entry.has_thumbnail ? (
                   <ThumbnailPreview volumeId={volumeId} path={entry.path} />
                 ) : (
-                  <File className="h-10 w-10 text-muted" />
+                  <File className="h-10 w-10 text-muted transition-colors duration-150 group-hover:text-body" />
                 )}
               </div>
               <InlineRename
@@ -123,7 +134,9 @@ export function FileGridView({
                 onCommit={(next) => onRenameCommit(entry, next)}
                 onCancel={onRenameCancel}
               >
-                <p className="truncate text-sm font-medium text-ink">{entry.name}</p>
+                <p className="truncate text-sm font-medium text-ink transition-colors duration-150 group-hover:text-body-strong">
+                  {entry.name}
+                </p>
               </InlineRename>
             </div>
           </GridCard>
