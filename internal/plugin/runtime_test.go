@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -106,15 +108,15 @@ func TestServicePublisher(t *testing.T) {
 	db := openTestDB(t)
 	service := NewService(db, t.TempDir(), nil, nil)
 
-	var received bool
+	var received atomic.Bool
 	service.bus.Subscribe(EventVolumeCreated, func(ctx context.Context, event Event) {
-		received = true
+		received.Store(true)
 	})
 
 	service.Publisher().VolumeCreated(context.Background(), volume.VolumeCreatedEvent{
 		Volume: &volume.Volume{ID: uuid.New(), Name: "demo"},
 	})
-	require.Eventually(t, func() bool { return received }, time.Second, 10*time.Millisecond)
+	require.Eventually(t, func() bool { return received.Load() }, time.Second, 10*time.Millisecond)
 }
 
 func TestServiceListAndSetEnabledMissing(t *testing.T) {
@@ -136,8 +138,11 @@ func TestBridgeAllEvents(t *testing.T) {
 	vol := &volume.Volume{ID: volID, Name: "demo"}
 
 	types := make(map[string]struct{})
+	var typesMu sync.Mutex
 	bus.Subscribe("*", func(ctx context.Context, event Event) {
+		typesMu.Lock()
 		types[event.Type] = struct{}{}
+		typesMu.Unlock()
 	})
 
 	bridge.FileUploaded(context.Background(), volume.FileUploadedEvent{VolumeID: volID, Name: "a"})
@@ -147,6 +152,8 @@ func TestBridgeAllEvents(t *testing.T) {
 	bridge.VolumeDeleted(context.Background(), volume.VolumeDeletedEvent{VolumeID: volID, Name: "demo"})
 
 	require.Eventually(t, func() bool {
+		typesMu.Lock()
+		defer typesMu.Unlock()
 		return len(types) >= 5
 	}, time.Second, 10*time.Millisecond)
 }
@@ -157,13 +164,13 @@ func TestHostAPIEmit(t *testing.T) {
 	bus := NewEventBus()
 	host := NewHostAPIServer("demo", bus, registry, stubVolumeProvider{})
 
-	var emitted bool
+	var emitted atomic.Bool
 	bus.Subscribe("custom.event", func(ctx context.Context, event Event) {
-		emitted = true
+		emitted.Store(true)
 	})
 
 	require.NoError(t, host.Emit(context.Background(), NewCustomEvent("custom.event", "", nil)))
-	require.Eventually(t, func() bool { return emitted }, time.Second, 10*time.Millisecond)
+	require.Eventually(t, func() bool { return emitted.Load() }, time.Second, 10*time.Millisecond)
 }
 
 func TestRegistryListLogsOwnerScope(t *testing.T) {
