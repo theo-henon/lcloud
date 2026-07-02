@@ -255,6 +255,22 @@ Strategic shifts (new audience, new deployment model) → **VISION.md**, not IDE
 
 ---
 
+### Admin-configurable max upload size
+**Context:** The server rejects uploads above a fixed limit (**100 MB** by default, `104857600` bytes). This is set via the environment variable `MAX_UPLOAD_BYTES` at startup (`internal/config/config.go`, `.env.example`, `README.md`) — **not** in the volume explorer SPEC (which covers the upload queue and parallel slots only). Enforcement happens in `FileService.Upload`; the UI shows the generic error `upload exceeds max size`. Operator feedback: everyday large files (e.g. `.dmg` installers) fail until the env var is raised and the process restarted. The Settings page already stores instance prefs in PostgreSQL (`mask_disk_names`) but upload limit is not exposed there.
+**Value:** Admin can see and adjust the cap from the control panel; upload queue errors can name the limit in plain language (e.g. "Max 100 MB per file"); no SSH to edit `.env` for homelab tweaks. Safer than an unbounded default.
+**Estimated effort:** Medium
+**Dependencies:** Settings API + `instance_settings` (shipped pattern); FileService must apply a runtime or hot-reloaded limit; optional `GET /settings` field for read-only display to all users
+**Date:** 2026-07-02
+
+**Workaround today:** set `MAX_UPLOAD_BYTES` in `.env` (bytes), e.g. `524288000` for 500 MB or `1073741824` for 1 GB, then restart Docker / the Go server.
+
+**Possible scope (post-MVP `/spec`):**
+- **Backend:** `max_upload_bytes` on `instance_settings`; admin-only `PATCH`; validate min/max bounds (e.g. 1 MB – 2 GB); FileService reads from settings service (with env as fallback / ceiling)
+- **UI:** Settings → Security or Storage card — numeric input in MB, helper text, save; upload queue uses limit in error copy when API returns `UPLOAD_TOO_LARGE`
+- **Out of scope v1:** per-volume upload limits (volume quota already exists separately)
+
+---
+
 ### Monitoring dashboard — visual upgrade
 **Context:** MVP monitoring (`/monitoring`) shows disk cards, a volume table, and per-volume stats (used/quota, category bars, top MIME types). All usage bars use the same primary yellow — no color signal when a quota is nearly full. Data is **snapshot-only** (stats cache per volume, no history over time). The `alert_usage` task can fire on the event bus when a threshold is exceeded, but the monitoring UI does not surface alert state or tie into a notification center yet.
 **Value:** Understand disk and volume health at a glance: colored quota bars (green → yellow → red), charts for file-type breakdown, and optional trends so operators see problems before uploads fail — without reading raw numbers.

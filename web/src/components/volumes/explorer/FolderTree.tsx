@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronRight, Folder } from "lucide-react";
 import { useDroppable } from "@dnd-kit/core";
 import { useVolumeFiles } from "@/hooks/useVolumeFiles";
+import { treeExpandedPathsForSelection } from "@/lib/explorerPaths";
 import { cn } from "@/lib/utils";
 
 type TreeNodeProps = {
@@ -105,6 +106,11 @@ type FolderTreeProps = {
 
 export function FolderTree({ volumeId, selectedPath, onSelect, width }: FolderTreeProps) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ ".": true });
+
+  useEffect(() => {
+    const paths = treeExpandedPathsForSelection(selectedPath);
+    setExpanded(Object.fromEntries(paths.map((path) => [path, true])));
+  }, [selectedPath]);
 
   return (
     <aside
