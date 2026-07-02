@@ -17,5 +17,7 @@ var (
 	ErrFileNotFound       = errors.New("file not found")
 	ErrDirectoryExists    = errors.New("directory already exists")
 	ErrNotDirectory       = errors.New("not a directory")
+	ErrNotAFile           = errors.New("not a file")
+	ErrInvalidEntryName   = errors.New("invalid entry name")
 	ErrForbidden          = errors.New("forbidden")
 )

@@ -411,8 +411,8 @@ export const api = {
     }
     return (await response.json()) as FileEntry;
   },
-  fileContentUrl(volumeId: string, path: string) {
-    const params = new URLSearchParams({ path });
+  fileContentUrl(volumeId: string, path: string, disposition: "inline" | "attachment" = "attachment") {
+    const params = new URLSearchParams({ path, disposition });
     return `/api/volumes/${volumeId}/files/content?${params}`;
   },
   fileThumbnailUrl(volumeId: string, path: string) {
@@ -422,6 +422,18 @@ export const api = {
   deleteFile(volumeId: string, path: string) {
     const params = new URLSearchParams({ path });
     return apiRequest<void>(`/api/volumes/${volumeId}/files?${params}`, { method: "DELETE" });
+  },
+  moveFile(volumeId: string, fromPath: string, toPath: string) {
+    return apiRequest<FileEntry>(`/api/volumes/${volumeId}/files/move`, {
+      method: "PATCH",
+      body: JSON.stringify({ from_path: fromPath, to_path: toPath }),
+    });
+  },
+  renameFile(volumeId: string, path: string, newName: string) {
+    return apiRequest<FileEntry>(`/api/volumes/${volumeId}/files/rename`, {
+      method: "PATCH",
+      body: JSON.stringify({ path, new_name: newName }),
+    });
   },
   async downloadFile(volumeId: string, path: string, filename: string) {
     const headers = new Headers();

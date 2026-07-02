@@ -26,6 +26,10 @@ func (b *EventBridge) FileMoved(ctx context.Context, event volume.FileMovedEvent
 	b.bus.Publish(ctx, FromFileMoved(event))
 }
 
+func (b *EventBridge) FileRenamed(ctx context.Context, event volume.FileRenamedEvent) {
+	b.bus.Publish(ctx, FromFileRenamed(event))
+}
+
 func (b *EventBridge) VolumeCreated(ctx context.Context, event volume.VolumeCreatedEvent) {
 	b.bus.Publish(ctx, FromVolumeCreated(event))
 }

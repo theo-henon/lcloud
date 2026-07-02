@@ -14,6 +14,14 @@ func ContentDispositionAttachment(filename string) string {
 	return fmt.Sprintf("attachment; filename=%q", safe)
 }
 
+func ContentDispositionInline(filename string) string {
+	safe := sanitizeFilename(filepath.Base(filename))
+	if safe == "" {
+		safe = "preview"
+	}
+	return fmt.Sprintf("inline; filename=%q", safe)
+}
+
 func sanitizeFilename(name string) string {
 	var b strings.Builder
 	b.Grow(len(name))

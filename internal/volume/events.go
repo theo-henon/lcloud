@@ -22,10 +22,17 @@ type FileDeletedEvent struct {
 }
 
 type FileMovedEvent struct {
-	VolumeID     uuid.UUID
-	FromPath     string
-	ToPath       string
-	SizeBytes    int64
+	VolumeID  uuid.UUID
+	FromPath  string
+	ToPath    string
+	SizeBytes int64
+}
+
+type FileRenamedEvent struct {
+	VolumeID  uuid.UUID
+	OldPath   string
+	NewPath   string
+	EntryType string // "file" | "directory"
 }
 
 type VolumeCreatedEvent struct {
@@ -45,6 +52,7 @@ type EventPublisher interface {
 	FileUploaded(ctx context.Context, event FileUploadedEvent)
 	FileDeleted(ctx context.Context, event FileDeletedEvent)
 	FileMoved(ctx context.Context, event FileMovedEvent)
+	FileRenamed(ctx context.Context, event FileRenamedEvent)
 	VolumeCreated(ctx context.Context, event VolumeCreatedEvent)
 	VolumeUpdated(ctx context.Context, event VolumeUpdatedEvent)
 	VolumeDeleted(ctx context.Context, event VolumeDeletedEvent)

@@ -22,6 +22,7 @@ type noopPublisher struct{}
 func (noopPublisher) FileUploaded(context.Context, volume.FileUploadedEvent)   {}
 func (noopPublisher) FileDeleted(context.Context, volume.FileDeletedEvent)     {}
 func (noopPublisher) FileMoved(context.Context, volume.FileMovedEvent)         {}
+func (noopPublisher) FileRenamed(context.Context, volume.FileRenamedEvent)     {}
 func (noopPublisher) VolumeCreated(context.Context, volume.VolumeCreatedEvent) {}
 func (noopPublisher) VolumeUpdated(context.Context, volume.VolumeUpdatedEvent) {}
 func (noopPublisher) VolumeDeleted(context.Context, volume.VolumeDeletedEvent) {}

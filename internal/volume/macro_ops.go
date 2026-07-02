@@ -82,70 +82,7 @@ func (m *MacroOps) DeleteFileInternal(ctx context.Context, vol *Volume, relPath 
 }
 
 func (m *MacroOps) MoveFileInternal(ctx context.Context, vol *Volume, fromRel, toRel string) error {
-	_ = ctx
-	fromRel = filepath.ToSlash(cleanRelativePath(fromRel))
-	toRel = filepath.ToSlash(cleanRelativePath(toRel))
-
-	fromAbs, err := m.paths.ResolveUserdata(vol.RootPath, fromRel)
-	if err != nil {
-		return err
-	}
-	toAbs, err := m.paths.ResolveUserdata(vol.RootPath, toRel)
-	if err != nil {
-		return err
-	}
-
-	fromInfo, err := os.Stat(fromAbs)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return ErrFileNotFound
-		}
-		return err
-	}
-	if fromInfo.IsDir() {
-		return ErrNotDirectory
-	}
-	if _, err := os.Stat(toAbs); err == nil {
-		return ErrDirectoryExists
-	}
-
-	if err := os.MkdirAll(filepath.Dir(toAbs), 0o755); err != nil {
-		return err
-	}
-	if err := os.Rename(fromAbs, toAbs); err != nil {
-		return err
-	}
-
-	record, metaErr := m.metadata.ReadByRelativePath(vol.RootPath, fromRel)
-	if metaErr == nil {
-		record.RelativePath = toRel
-		record.Name = filepath.Base(toRel)
-		_ = m.metadata.Write(vol.RootPath, record)
-		if idx, err := m.indexManager.Get(vol.RootPath); err == nil {
-			_ = idx.Delete(fromRel)
-			_ = idx.Index(indexer.FileMetadata{
-				ID:           record.ID,
-				Name:         record.Name,
-				RelativePath: record.RelativePath,
-				MimeType:     record.MimeType,
-				SizeBytes:    record.SizeBytes,
-				ModifiedAt:   record.ModifiedAt,
-				SHA256:       record.SHA256,
-			})
-		}
-	}
-
-	m.invalidateStats(vol.RootPath)
-
-	if m.events != nil {
-		m.events.FileMoved(context.Background(), FileMovedEvent{
-			VolumeID:     vol.ID,
-			FromPath:     fromRel,
-			ToPath:       toRel,
-			SizeBytes:    fromInfo.Size(),
-		})
-	}
-	return nil
+	return MoveFile(ctx, m.fileOpDeps(), vol, fromRel, toRel)
 }
 
 func (m *MacroOps) InvalidateStats(rootPath string) {
