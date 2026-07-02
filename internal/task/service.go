@@ -104,6 +104,14 @@ func (s *Service) Create(ctx context.Context, claims *auth.Claims, input CreateT
 	if err := s.db.Create(&task).Error; err != nil {
 		return nil, err
 	}
+	// GORM Create skips false booleans; persist explicit disabled state.
+	if !input.Enabled {
+		if err := s.db.Model(&task).Update("enabled", false).Error; err != nil {
+			_ = s.db.Delete(&Task{}, "id = ?", task.ID).Error
+			return nil, err
+		}
+		task.Enabled = false
+	}
 	if s.scheduler != nil {
 		if err := s.scheduler.Register(ctx, task); err != nil {
 			_ = s.db.Delete(&Task{}, "id = ?", task.ID).Error
@@ -205,7 +213,9 @@ func (s *Service) Patch(ctx context.Context, claims *auth.Claims, id uuid.UUID, 
 			if saveErr := s.db.Save(&previous).Error; saveErr != nil {
 				return nil, fmt.Errorf("scheduler register failed: %w; rollback failed: %v", err, saveErr)
 			}
-			_ = s.scheduler.Register(ctx, previous)
+			if regErr := s.scheduler.Register(ctx, previous); regErr != nil {
+				return nil, fmt.Errorf("scheduler register failed: %w; rollback re-register failed: %v", err, regErr)
+			}
 			return nil, err
 		}
 	}
@@ -234,6 +244,9 @@ func (s *Service) RunNow(ctx context.Context, claims *auth.Claims, id uuid.UUID,
 	}
 	if err := s.authorizeTask(claims, task); err != nil {
 		return uuid.Nil, err
+	}
+	if !task.Enabled {
+		return uuid.Nil, ErrTaskDisabled
 	}
 
 	runID := uuid.New()

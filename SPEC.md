@@ -596,6 +596,7 @@ Poll `GET /tasks/:id/runs` or refresh task detail for result.
 | `GLOBAL_ADMIN_ONLY` | Non-admin creates global task |
 | `VOLUME_NOT_FOUND` | volume_id invalid or not accessible |
 | `TASK_ALREADY_RUNNING` | Manual run while execution in progress |
+| `TASK_DISABLED` | Manual run on a disabled task |
 | `VOLUME_TASK_BUSY` | Volume locked by another destructive macro (if OQ2 = fail fast) |
 | `FORBIDDEN` | Accessing another user's task |
 

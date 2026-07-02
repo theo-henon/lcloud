@@ -90,7 +90,8 @@ export function TaskList({ tasks, selectedId, onSelect, onEdit }: TaskListProps)
               <Button
                 variant="outline"
                 className="h-8 px-3 text-xs"
-                disabled={runTask.isPending}
+                disabled={runTask.isPending || !task.enabled}
+                title={task.enabled ? undefined : "Enable the task before running it"}
                 onClick={() => {
                   const dryRun = Boolean(task.parameters?.dry_run);
                   if (!dryRun && !window.confirm("Run this task now? Files may be modified.")) {

@@ -106,3 +106,55 @@ func TestTaskGlobalForbiddenForUser(t *testing.T) {
 	router.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusForbidden, rec.Code)
 }
+
+func TestTaskRunDisabled(t *testing.T) {
+	router, service, _, storageRoot := setupTestRouter(t)
+
+	login, err := service.Login("admin@example.com", "adminpass1")
+	require.NoError(t, err)
+
+	volBody, err := json.Marshal(map[string]any{
+		"name":        "Photos",
+		"disk_path":   storageRoot,
+		"quota_bytes": 50 * 1024 * 1024 * 1024,
+		"filters":     map[string]any{},
+	})
+	require.NoError(t, err)
+	volReq := httptest.NewRequest(http.MethodPost, "/api/volumes", bytes.NewReader(volBody))
+	volReq.Header.Set("Content-Type", "application/json")
+	volReq.Header.Set("Authorization", "Bearer "+login.AccessToken)
+	volRec := httptest.NewRecorder()
+	router.ServeHTTP(volRec, volReq)
+	require.Equal(t, http.StatusCreated, volRec.Code)
+
+	var vol volume.Volume
+	require.NoError(t, json.Unmarshal(volRec.Body.Bytes(), &vol))
+
+	createBody, err := json.Marshal(map[string]any{
+		"name":          "Disabled cleanup",
+		"macro":         task.MacroDeleteOldFiles,
+		"scope":         task.ScopeVolume,
+		"volume_id":     vol.ID.String(),
+		"parameters":    map[string]any{"days": 90},
+		"schedule_type": task.ScheduleTypeCron,
+		"schedule":      "0 2 * * 0",
+		"enabled":       false,
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/tasks", bytes.NewReader(createBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+login.AccessToken)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusCreated, rec.Code)
+
+	var created task.TaskView
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &created))
+
+	runReq := httptest.NewRequest(http.MethodPost, "/api/tasks/"+created.ID.String()+"/run", nil)
+	runReq.Header.Set("Authorization", "Bearer "+login.AccessToken)
+	runRec := httptest.NewRecorder()
+	router.ServeHTTP(runRec, runReq)
+	require.Equal(t, http.StatusUnprocessableEntity, runRec.Code)
+}

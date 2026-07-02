@@ -280,6 +280,8 @@ func (h *TaskHandler) handleTaskError(c *gin.Context, err error) {
 		httputil.Unprocessable(c, "TASK_ALREADY_RUNNING", err.Error())
 	case errors.Is(err, task.ErrVolumeTaskBusy):
 		httputil.Unprocessable(c, "VOLUME_TASK_BUSY", err.Error())
+	case errors.Is(err, task.ErrTaskDisabled):
+		httputil.Unprocessable(c, "TASK_DISABLED", err.Error())
 	default:
 		httputil.InternalError(c, "task operation failed")
 	}

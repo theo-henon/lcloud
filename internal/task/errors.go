@@ -13,4 +13,5 @@ var (
 	ErrForbidden         = errors.New("forbidden")
 	ErrTaskAlreadyRunning = errors.New("task already running")
 	ErrVolumeTaskBusy    = errors.New("volume task busy")
+	ErrTaskDisabled      = errors.New("task disabled")
 )
