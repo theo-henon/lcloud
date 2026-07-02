@@ -187,8 +187,8 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	fileHandler := NewFileHandler(cfg.FileService)
 	monitoringHandler := NewMonitoringHandler(cfg.MonitoringService)
 	searchHandler := NewSearchHandler(cfg.VolumeService, cfg.IndexManager)
-	settingsHandler := NewSettingsHandler(cfg.SettingsService)
-	adminSettingsHandler := NewAdminSettingsHandler(cfg.SettingsService)
+	settingsHandler := NewSettingsHandler(cfg.SettingsService, cfg.MaxUploadBytes)
+	adminSettingsHandler := NewAdminSettingsHandler(cfg.SettingsService, cfg.MaxUploadBytes)
 	pluginHandler := NewPluginHandler(cfg.PluginService)
 	taskHandler := NewTaskHandler(cfg.TaskService)
 

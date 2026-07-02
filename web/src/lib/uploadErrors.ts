@@ -1,7 +1,15 @@
 import { ApiError } from "@/lib/api";
+import { formatBytes } from "@/lib/utils";
 
-export function formatUploadError(error: unknown): string {
+export function formatUploadError(error: unknown, maxUploadBytes?: number): string {
   if (error instanceof ApiError) {
+    if (error.code === "UPLOAD_TOO_LARGE") {
+      const limit =
+        maxUploadBytes != null && maxUploadBytes > 0
+          ? formatBytes(maxUploadBytes)
+          : "the server limit";
+      return `This file exceeds the maximum upload size (${limit}).`;
+    }
     if (error.code === "FILE_FILTER_REJECTED") {
       return "This file type is not allowed for this volume.";
     }

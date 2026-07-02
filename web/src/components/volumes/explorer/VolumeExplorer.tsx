@@ -21,6 +21,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useExplorerPrefs, type ColumnId } from "@/hooks/useExplorerPrefs";
 import { useUploadQueue } from "@/hooks/useUploadQueue";
+import { useSettings } from "@/hooks/useSettings";
 import {
   useCreateDirectory,
   useDeleteFile,
@@ -90,6 +91,7 @@ export function VolumeExplorer({ volumeId, currentPath, onPathChange }: VolumeEx
   const queryClient = useQueryClient();
   const { prefs, setPrefs } = useExplorerPrefs();
   const filesQuery = useVolumeFiles(volumeId, currentPath);
+  const settingsQuery = useSettings();
   const createDirectory = useCreateDirectory(volumeId);
   const deleteFile = useDeleteFile(volumeId);
   const moveFile = useMoveFile(volumeId);
@@ -98,7 +100,11 @@ export function VolumeExplorer({ volumeId, currentPath, onPathChange }: VolumeEx
     void queryClient.invalidateQueries({ queryKey: ["volumes", volumeId, "files"] });
   }, [queryClient, volumeId]);
 
-  const { items, enqueueFiles, dismissItem, cancelQueued } = useUploadQueue(volumeId, invalidateFiles);
+  const { items, enqueueFiles, dismissItem, cancelQueued } = useUploadQueue(
+    volumeId,
+    invalidateFiles,
+    settingsQuery.data?.max_upload_bytes,
+  );
 
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");

@@ -16,7 +16,11 @@ export type UploadQueueItem = {
 
 const MAX_PARALLEL = 3;
 
-export function useUploadQueue(volumeId: string, onComplete?: () => void) {
+export function useUploadQueue(
+  volumeId: string,
+  onComplete?: () => void,
+  maxUploadBytes?: number,
+) {
   const [items, setItems] = useState<UploadQueueItem[]>([]);
   const activeCount = useRef(0);
   const itemsRef = useRef<UploadQueueItem[]>([]);
@@ -63,7 +67,7 @@ export function useUploadQueue(volumeId: string, onComplete?: () => void) {
       } catch (error) {
         setItemState(item.id, {
           state: "error",
-          error: formatUploadError(error),
+          error: formatUploadError(error, maxUploadBytes),
           speedBytesPerSec: 0,
         });
       } finally {
@@ -71,7 +75,7 @@ export function useUploadQueue(volumeId: string, onComplete?: () => void) {
         pump();
       }
     },
-    [onComplete, setItemState, volumeId],
+    [maxUploadBytes, onComplete, setItemState, volumeId],
   );
 
   const pump = useCallback(() => {

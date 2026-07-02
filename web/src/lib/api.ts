@@ -178,6 +178,7 @@ export interface GlobalSearchResponse {
 
 export interface InstanceSettings {
   mask_disk_names: boolean;
+  max_upload_bytes: number;
 }
 
 export type TaskScope = "volume" | "global";
