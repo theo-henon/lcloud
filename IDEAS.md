@@ -249,11 +249,12 @@ Strategic shifts (new audience, new deployment model) → **VISION.md**, not IDE
 
 **Operator direction:**
 - **Quota color gradient** — progress bar and/or stat text shifts by usage % (e.g. &lt;70% emerald, 70–85% warning, 85–95% orange, ≥95% rose); same logic on disk cards, volume list, and volume detail panel
+- **Health status pills** — small green / yellow / red indicator on each disk card (and elsewhere as needed): obvious at-a-glance status (OK, warning, critical) derived from free-space thresholds and mount/readability; instance-level pill optional (API + DB reachable via `/api/health`)
 - **Charts** — donut or bar chart for category breakdown (images, videos, documents…); optional stacked view of volumes per physical disk
 - **At-a-glance clarity** — sort or badge volumes "at risk" when quota is high; show remaining space prominently, not only used bytes
 
 **Possible scope (post-MVP `/spec`):**
-- **UI v1 (no new backend):** threshold-colored bars everywhere quotas appear; Recharts (or similar) for category/disk charts; global summary row (total used / total quota / volumes in warning)
+- **UI v1 (no new backend):** threshold-colored bars everywhere quotas appear; health pills on disk cards; Recharts (or similar) for category/disk charts; global summary row (total used / total quota / volumes in warning)
 - **UI v2:** align colors with `alert_usage` threshold_percent from tasks (or a default 80/90/95% palette)
 - **History (heavier):** periodic usage snapshots (PostgreSQL or volume cache) → line chart "usage over 7/30 days"; growth hint ("full in ~N days" if trend stable)
 - **Cross-links:** click volume in chart → volume detail; surface last `volume.alert.usage` event if notification system exists
@@ -261,6 +262,36 @@ Strategic shifts (new audience, new deployment model) → **VISION.md**, not IDE
 
 **Follow-up to validate post-ship:**
 - Is usage **history** worth the storage/complexity, or are colored snapshots enough for homelab scale?
+
+---
+
+### Dashboard home — configurable widget layout
+**Context:** `/dashboard` is still a Phase 0 placeholder (welcome message only). VISION Stage 1 calls for *"a dashboard that shows what's happening"*, but no post-MVP spec exists. Monitoring, Tasks, Plugins, and Volumes each have full pages — the home dashboard should aggregate them, not duplicate them.
+**Value:** Land on a personal **cockpit**: mini-versions of the modules you care about, arranged how you want. Admin and regular users each get a layout that follows them on any device (phone, laptop) via server-stored preferences.
+**Estimated effort:** Medium (fixed widget dashboard) to Heavy (drag-and-drop layout + server persistence + widget catalog)
+**Dependencies:** MVP modules shipped; monitoring visual upgrade (health pills, colored quotas) feeds disk/volume widgets; optional notification idea for activity widget
+**Date:** 2026-07-02
+
+**Operator direction:**
+- **Configurable layout** — admin or user adds, removes, resizes, and **repositions widgets** on a grid (drag-and-drop), like a lightweight personal homepage
+- **Widget catalog** — each widget is a **mini view** of an existing area, e.g.:
+  - Storage summary (disks + health pills, volumes at risk)
+  - Recent / failed task runs + next scheduled runs
+  - Plugin status strip
+  - Quick actions (new volume, open monitoring)
+  - System health (instance OK / degraded)
+- **Server-side persistence** — layout + widget config saved **per user in PostgreSQL** (not localStorage), so the same dashboard on any browser/device; `GET` / `PATCH /api/users/me/dashboard` or dedicated preferences endpoint
+- **Role-aware** — widget picker hides admin-only widgets for `user` role (e.g. all-instance summary vs own volumes only)
+
+**Possible scope (post-MVP `/spec`):**
+- **Phase A — curated home (lighter):** fixed set of widgets, default layout, no drag-and-drop yet; replaces placeholder
+- **Phase B — full customization:** react-grid-layout (or similar), widget registry, per-user layout JSON in DB, edit mode toggle ("Customize dashboard")
+- **Backend:** `user_dashboard_layout` model (user_id, layout JSON, updated_at); validate widget IDs server-side
+- **Out of scope for v1:** third-party widget plugins, shared/dashboard templates between users, mobile-native widget SDK
+
+**Relationship to other ideas:**
+- Monitoring upgrade → disk health pills + quota colors appear in **Storage widgets** on both `/monitoring` and `/dashboard`
+- In-app notifications → optional **Activity / alerts** widget later
 
 ---
 
