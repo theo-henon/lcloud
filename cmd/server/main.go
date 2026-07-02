@@ -17,6 +17,7 @@ import (
 	"github.com/theo-henon/lcloud/internal/monitoring"
 	"github.com/theo-henon/lcloud/internal/plugin"
 	"github.com/theo-henon/lcloud/internal/settings"
+	"github.com/theo-henon/lcloud/internal/task"
 	"github.com/theo-henon/lcloud/internal/volume"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -43,6 +44,8 @@ func main() {
 		&settings.InstanceSettings{},
 		&plugin.Plugin{},
 		&plugin.PluginLogEntry{},
+		&task.Task{},
+		&task.TaskRun{},
 	); err != nil {
 		log.Fatalf("migrate: %v", err)
 	}
@@ -65,6 +68,15 @@ func main() {
 
 	pluginService := plugin.NewService(db, cfg.PluginsPath, volumeService, nil)
 	volumeService.SetEventPublisher(pluginService.Publisher())
+
+	macroOps := volume.NewMacroOps(volumeService, indexManager, monitoringService.StatsCache(), pluginService.Publisher())
+	taskExecutor := task.NewExecutor(macroOps, monitoringService, volumeService, pluginService)
+	taskService := task.NewService(db, volumeService, taskExecutor, pluginService)
+	taskScheduler, err := task.NewScheduler(taskService)
+	if err != nil {
+		log.Fatalf("task scheduler: %v", err)
+	}
+	taskService.SetScheduler(taskScheduler)
 	fileService.SetEventPublisher(pluginService.Publisher())
 
 	ctx := context.Background()
@@ -72,6 +84,18 @@ func main() {
 		log.Fatalf("plugin startup: %v", err)
 	}
 	defer pluginService.Stop()
+
+	enabledTasks, err := taskService.ListEnabled()
+	if err != nil {
+		log.Fatalf("load tasks: %v", err)
+	}
+	if err := taskScheduler.LoadAll(ctx, enabledTasks); err != nil {
+		log.Fatalf("schedule tasks: %v", err)
+	}
+	taskScheduler.Start()
+	defer func() {
+		_ = taskScheduler.Shutdown()
+	}()
 
 	staticFS, err := fs.Sub(staticEmbed, "static")
 	if err != nil {
@@ -86,6 +110,7 @@ func main() {
 		MonitoringService: monitoringService,
 		SettingsService:   settingsService,
 		PluginService:     pluginService,
+		TaskService:       taskService,
 		IndexManager:      indexManager,
 		MaxUploadBytes:    cfg.MaxUploadBytes,
 		StaticFS:          staticFS,
@@ -99,6 +124,7 @@ func main() {
 		ch := make(chan os.Signal, 1)
 		signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
 		<-ch
+		_ = taskScheduler.Shutdown()
 		pluginService.Stop()
 		_ = server.Close()
 	}()

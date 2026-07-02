@@ -21,6 +21,13 @@ type FileDeletedEvent struct {
 	SizeBytes    int64
 }
 
+type FileMovedEvent struct {
+	VolumeID     uuid.UUID
+	FromPath     string
+	ToPath       string
+	SizeBytes    int64
+}
+
 type VolumeCreatedEvent struct {
 	Volume *Volume
 }
@@ -37,6 +44,7 @@ type VolumeDeletedEvent struct {
 type EventPublisher interface {
 	FileUploaded(ctx context.Context, event FileUploadedEvent)
 	FileDeleted(ctx context.Context, event FileDeletedEvent)
+	FileMoved(ctx context.Context, event FileMovedEvent)
 	VolumeCreated(ctx context.Context, event VolumeCreatedEvent)
 	VolumeUpdated(ctx context.Context, event VolumeUpdatedEvent)
 	VolumeDeleted(ctx context.Context, event VolumeDeletedEvent)

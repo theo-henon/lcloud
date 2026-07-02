@@ -16,8 +16,9 @@ const (
 	EventVolumeCreated  = "volume.created"
 	EventVolumeUpdated  = "volume.updated"
 	EventVolumeDeleted  = "volume.deleted"
-	EventTaskExecuted   = "task.executed"
-	EventTaskFailed     = "task.failed"
+	EventTaskExecuted       = "task.executed"
+	EventTaskFailed         = "task.failed"
+	EventVolumeAlertUsage   = "volume.alert.usage"
 	EventPluginRegistered   = "plugin.registered"
 	EventPluginUnregistered = "plugin.unregistered"
 )
@@ -65,6 +66,15 @@ func FromFileDeleted(e volume.FileDeletedEvent) Event {
 	})
 }
 
+func FromFileMoved(e volume.FileMovedEvent) Event {
+	return newEvent(EventFileMoved, e.VolumeID.String(), map[string]any{
+		"volume_id":  e.VolumeID.String(),
+		"from_path":  e.FromPath,
+		"to_path":    e.ToPath,
+		"size_bytes": e.SizeBytes,
+	})
+}
+
 func FromVolumeCreated(e volume.VolumeCreatedEvent) Event {
 	vol := e.Volume
 	return newEvent(EventVolumeCreated, vol.ID.String(), map[string]any{
@@ -103,4 +113,32 @@ func FromPluginUnregistered(pluginID string) Event {
 
 func NewCustomEvent(eventType, volumeID string, payload any) Event {
 	return newEvent(eventType, volumeID, payload)
+}
+
+func FromTaskExecuted(taskID, macro, volumeID string, affectedCount int, durationMs int64) Event {
+	payload := map[string]any{
+		"task_id":        taskID,
+		"macro":          macro,
+		"affected_count": affectedCount,
+		"duration_ms":    durationMs,
+	}
+	return newEvent(EventTaskExecuted, volumeID, payload)
+}
+
+func FromTaskFailed(taskID, macro, volumeID, errMsg string) Event {
+	payload := map[string]any{
+		"task_id": taskID,
+		"macro":   macro,
+		"error":   errMsg,
+	}
+	return newEvent(EventTaskFailed, volumeID, payload)
+}
+
+func FromVolumeAlertUsage(volumeID string, usagePercent int, quotaBytes, usedBytes int64) Event {
+	return newEvent(EventVolumeAlertUsage, volumeID, map[string]any{
+		"volume_id":      volumeID,
+		"usage_percent":  usagePercent,
+		"quota_bytes":    quotaBytes,
+		"used_bytes":     usedBytes,
+	})
 }

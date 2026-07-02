@@ -126,6 +126,21 @@
 
 ---
 
+### In-app notification system (alert center)
+**Context:** Phase 1.4 ships `alert_usage` and other task events on the internal event bus (`volume.alert.usage`, `task.executed`, etc.), but the MVP has no user-facing notification layer — only task run history messages. Users expect a visible signal when a quota alert fires, not just a line in execution logs.
+**Value:** A first-class notification channel in the web UI: in-app toasts, a notification center (bell icon + unread list), optional persistence and read/unread state. Task alerts (quota usage, failed runs) and plugin-emitted events would publish into this system so operators see what happened without digging into task history or building a plugin first.
+**Estimated effort:** Medium
+**Dependencies:** Phase 1.4 (task system + event bus); optionally PostgreSQL model for notification inbox
+**Date:** 2026-07-02
+
+**Possible scope (post-MVP `/spec`):**
+- Notification model + API (`GET /notifications`, mark read, dismiss)
+- UI: toast on new alert, sidebar/header bell with history
+- Subscribers: `volume.alert.usage`, `task.failed`, plugin custom events
+- Out of scope for v1 of this idea: email, push, SMS (those stay plugin/webhook territory)
+
+---
+
 ### Webhook notifications macro
 **Context:** Post-MVP macro — send an HTTP POST to an external URL on a condition (e.g. volume > 90% full).
 **Value:** Integration with external systems (Slack, Discord, custom automation webhooks).

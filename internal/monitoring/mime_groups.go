@@ -1,6 +1,18 @@
 package monitoring
 
-import "strings"
+import (
+	"math"
+	"strings"
+)
+
+// UsagePercentInt returns used/quota as a whole percent (0-100), rounded
+// to match UI display (e.g. UnifiedVolumeList, VolumeStatsPanel).
+func UsagePercentInt(usedBytes, quotaBytes int64) int {
+	if quotaBytes <= 0 {
+		return 0
+	}
+	return int(math.Round(float64(usedBytes) / float64(quotaBytes) * 100))
+}
 
 const (
 	CategoryImages    = "images"

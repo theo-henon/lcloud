@@ -180,6 +180,64 @@ export interface InstanceSettings {
   mask_disk_names: boolean;
 }
 
+export type TaskScope = "volume" | "global";
+export type TaskScheduleType = "cron" | "interval";
+export type TaskRunStatus = "success" | "failed" | "skipped" | "dry_run";
+
+export interface TaskRecord {
+  id: string;
+  owner_id: string;
+  name: string;
+  macro: string;
+  scope: TaskScope;
+  volume_id?: string;
+  volume_name?: string;
+  parameters: Record<string, unknown>;
+  schedule_type: TaskScheduleType;
+  schedule: string;
+  schedule_description: string;
+  enabled: boolean;
+  next_run_at?: string;
+  last_run_at?: string;
+  last_run_status?: TaskRunStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TaskRunRecord {
+  id: string;
+  task_id: string;
+  status: TaskRunStatus;
+  affected_count: number;
+  message: string;
+  error?: string;
+  started_at: string;
+  finished_at: string;
+  duration_ms: number;
+}
+
+export interface CreateTaskInput {
+  name: string;
+  macro: string;
+  scope: TaskScope;
+  volume_id?: string;
+  parameters?: Record<string, unknown>;
+  schedule_type: TaskScheduleType;
+  schedule: string;
+  enabled?: boolean;
+}
+
+export interface PatchTaskInput {
+  name?: string;
+  macro?: string;
+  scope?: TaskScope;
+  volume_id?: string;
+  parameters?: Record<string, unknown>;
+  schedule_type?: TaskScheduleType;
+  schedule?: string;
+  enabled?: boolean;
+}
+
 export interface LoginResponse {
   access_token: string;
   refresh_token: string;
@@ -434,6 +492,39 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(input),
     });
+  },
+  listTasks(volumeId?: string) {
+    const query = volumeId ? `?volume_id=${encodeURIComponent(volumeId)}` : "";
+    return apiRequest<{ tasks: TaskRecord[] }>(`/api/tasks${query}`);
+  },
+  getTask(id: string) {
+    return apiRequest<TaskRecord>(`/api/tasks/${id}`);
+  },
+  createTask(input: CreateTaskInput) {
+    return apiRequest<TaskRecord>("/api/tasks", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+  patchTask(id: string, input: PatchTaskInput) {
+    return apiRequest<TaskRecord>(`/api/tasks/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    });
+  },
+  deleteTask(id: string) {
+    return apiRequest<{ status: string }>(`/api/tasks/${id}`, { method: "DELETE" });
+  },
+  runTask(id: string, dryRun = false) {
+    const query = dryRun ? "?dry_run=true" : "";
+    return apiRequest<{ run_id: string }>(`/api/tasks/${id}/run${query}`, {
+      method: "POST",
+    });
+  },
+  listTaskRuns(id: string, limit = 20) {
+    return apiRequest<{ runs: TaskRunRecord[] }>(
+      `/api/tasks/${id}/runs?limit=${limit}`,
+    );
   },
 };
 

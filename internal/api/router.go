@@ -14,6 +14,7 @@ import (
 	"github.com/theo-henon/lcloud/internal/monitoring"
 	"github.com/theo-henon/lcloud/internal/plugin"
 	"github.com/theo-henon/lcloud/internal/settings"
+	"github.com/theo-henon/lcloud/internal/task"
 	"github.com/theo-henon/lcloud/internal/volume"
 	"github.com/theo-henon/lcloud/pkg/httputil"
 )
@@ -160,6 +161,7 @@ type RouterConfig struct {
 	MonitoringService *monitoring.Service
 	SettingsService   *settings.Service
 	PluginService     *plugin.Service
+	TaskService       *task.Service
 	IndexManager      *indexer.IndexManager
 	MaxUploadBytes    int64
 	StaticFS          fs.FS
@@ -188,6 +190,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	settingsHandler := NewSettingsHandler(cfg.SettingsService)
 	adminSettingsHandler := NewAdminSettingsHandler(cfg.SettingsService)
 	pluginHandler := NewPluginHandler(cfg.PluginService)
+	taskHandler := NewTaskHandler(cfg.TaskService)
 
 	api := router.Group("/api")
 	{
@@ -237,6 +240,14 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			protected.GET("/plugins/logs", pluginHandler.Logs)
 			protected.GET("/plugins/:id", pluginHandler.Get)
 			protected.PATCH("/plugins/:id", auth.RequireAdmin(), pluginHandler.Patch)
+
+			protected.GET("/tasks", taskHandler.List)
+			protected.POST("/tasks", taskHandler.Create)
+			protected.GET("/tasks/:id", taskHandler.Get)
+			protected.PATCH("/tasks/:id", taskHandler.Patch)
+			protected.DELETE("/tasks/:id", taskHandler.Delete)
+			protected.POST("/tasks/:id/run", taskHandler.Run)
+			protected.GET("/tasks/:id/runs", taskHandler.Runs)
 		}
 	}
 

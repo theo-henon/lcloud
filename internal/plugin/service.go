@@ -79,6 +79,10 @@ func (s *Service) ListLogs(ctx context.Context, claims *auth.Claims, filter LogF
 	return s.registry.ListLogs(ctx, filter)
 }
 
+func (s *Service) PublishEvent(ctx context.Context, event Event) {
+	s.bus.Publish(ctx, event)
+}
+
 type volumeProvider struct {
 	volumes *volume.Service
 }
