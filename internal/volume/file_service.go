@@ -337,6 +337,26 @@ func (s *FileService) rollbackUploadedFile(vol *Volume, absPath string, record F
 	_ = s.metadata.Delete(vol.RootPath, record.ID)
 }
 
+func (s *FileService) Move(claims *auth.Claims, volumeID uuid.UUID, fromPath, toPath string) (*FileEntry, error) {
+	vol, err := s.volumes.Get(claims, volumeID)
+	if err != nil {
+		return nil, err
+	}
+	if err := MoveFile(context.Background(), s.fileOpDeps(), vol, fromPath, toPath); err != nil {
+		return nil, err
+	}
+	toPath = filepath.ToSlash(cleanRelativePath(toPath))
+	return entryForPath(vol.RootPath, toPath, false)
+}
+
+func (s *FileService) Rename(claims *auth.Claims, volumeID uuid.UUID, relPath, newName string) (*FileEntry, error) {
+	vol, err := s.volumes.Get(claims, volumeID)
+	if err != nil {
+		return nil, err
+	}
+	return RenameEntry(context.Background(), s.fileOpDeps(), vol, relPath, newName)
+}
+
 func (s *FileService) OpenContent(claims *auth.Claims, volumeID uuid.UUID, relPath string) (*os.File, string, error) {
 	vol, err := s.volumes.Get(claims, volumeID)
 	if err != nil {

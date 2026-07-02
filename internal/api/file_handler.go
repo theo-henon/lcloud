@@ -105,6 +105,70 @@ func (h *FileHandler) Upload(c *gin.Context) {
 	httputil.JSON(c, http.StatusCreated, entry)
 }
 
+type moveFileRequest struct {
+	FromPath string `json:"from_path" binding:"required"`
+	ToPath   string `json:"to_path" binding:"required"`
+}
+
+type renameFileRequest struct {
+	Path    string `json:"path" binding:"required"`
+	NewName string `json:"new_name" binding:"required"`
+}
+
+func (h *FileHandler) Move(c *gin.Context) {
+	claims, ok := auth.ClaimsFromContext(c)
+	if !ok {
+		httputil.Unauthorized(c, "unauthorized")
+		return
+	}
+
+	volumeID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httputil.BadRequest(c, "invalid volume id")
+		return
+	}
+
+	var req moveFileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httputil.BadRequest(c, "invalid request body")
+		return
+	}
+
+	entry, err := h.files.Move(claims, volumeID, req.FromPath, req.ToPath)
+	if err != nil {
+		mapFileError(c, err)
+		return
+	}
+	httputil.JSON(c, http.StatusOK, entry)
+}
+
+func (h *FileHandler) Rename(c *gin.Context) {
+	claims, ok := auth.ClaimsFromContext(c)
+	if !ok {
+		httputil.Unauthorized(c, "unauthorized")
+		return
+	}
+
+	volumeID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httputil.BadRequest(c, "invalid volume id")
+		return
+	}
+
+	var req renameFileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httputil.BadRequest(c, "invalid request body")
+		return
+	}
+
+	entry, err := h.files.Rename(claims, volumeID, req.Path, req.NewName)
+	if err != nil {
+		mapFileError(c, err)
+		return
+	}
+	httputil.JSON(c, http.StatusOK, entry)
+}
+
 func (h *FileHandler) Download(c *gin.Context) {
 	claims, ok := auth.ClaimsFromContext(c)
 	if !ok {
@@ -134,8 +198,13 @@ func (h *FileHandler) Download(c *gin.Context) {
 	if mimeType == "" {
 		mimeType = "application/octet-stream"
 	}
+	disposition := c.DefaultQuery("disposition", "attachment")
 	c.Header("Content-Type", mimeType)
-	c.Header("Content-Disposition", httputil.ContentDispositionAttachment(relPath))
+	if disposition == "inline" {
+		c.Header("Content-Disposition", httputil.ContentDispositionInline(relPath))
+	} else {
+		c.Header("Content-Disposition", httputil.ContentDispositionAttachment(relPath))
+	}
 	c.Status(http.StatusOK)
 	_, _ = io.Copy(c.Writer, file)
 }
@@ -214,7 +283,11 @@ func mapFileError(c *gin.Context, err error) {
 	case errors.Is(err, volume.ErrUploadSizeMismatch):
 		httputil.BadRequest(c, "upload size mismatch")
 	case errors.Is(err, volume.ErrDirectoryExists):
-		httputil.Conflict(c, "directory already exists")
+		httputil.Error(c, http.StatusConflict, "PATH_EXISTS", "path already exists")
+	case errors.Is(err, volume.ErrInvalidEntryName):
+		httputil.Unprocessable(c, "INVALID_PATH", "invalid path")
+	case errors.Is(err, volume.ErrNotAFile):
+		httputil.Unprocessable(c, "NOT_A_FILE", "not a file")
 	case errors.Is(err, volume.ErrNotDirectory):
 		httputil.BadRequest(c, "not a directory")
 	default:

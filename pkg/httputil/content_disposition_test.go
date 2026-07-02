@@ -15,3 +15,10 @@ func TestContentDispositionAttachmentFallback(t *testing.T) {
 		t.Fatalf("unexpected header: %q", header)
 	}
 }
+
+func TestContentDispositionInline(t *testing.T) {
+	header := ContentDispositionInline("report.pdf")
+	if header != `inline; filename="report.pdf"` {
+		t.Fatalf("unexpected header: %q", header)
+	}
+}

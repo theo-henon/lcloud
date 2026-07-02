@@ -9,11 +9,12 @@ import (
 )
 
 type SettingsHandler struct {
-	settings *settings.Service
+	settings       *settings.Service
+	maxUploadBytes int64
 }
 
-func NewSettingsHandler(settingsService *settings.Service) *SettingsHandler {
-	return &SettingsHandler{settings: settingsService}
+func NewSettingsHandler(settingsService *settings.Service, maxUploadBytes int64) *SettingsHandler {
+	return &SettingsHandler{settings: settingsService, maxUploadBytes: maxUploadBytes}
 }
 
 func (h *SettingsHandler) Get(c *gin.Context) {
@@ -22,15 +23,17 @@ func (h *SettingsHandler) Get(c *gin.Context) {
 		httputil.InternalError(c, "unable to load settings")
 		return
 	}
+	public.MaxUploadBytes = h.maxUploadBytes
 	httputil.JSON(c, http.StatusOK, public)
 }
 
 type AdminSettingsHandler struct {
-	settings *settings.Service
+	settings       *settings.Service
+	maxUploadBytes int64
 }
 
-func NewAdminSettingsHandler(settingsService *settings.Service) *AdminSettingsHandler {
-	return &AdminSettingsHandler{settings: settingsService}
+func NewAdminSettingsHandler(settingsService *settings.Service, maxUploadBytes int64) *AdminSettingsHandler {
+	return &AdminSettingsHandler{settings: settingsService, maxUploadBytes: maxUploadBytes}
 }
 
 func (h *AdminSettingsHandler) Patch(c *gin.Context) {
@@ -49,5 +52,6 @@ func (h *AdminSettingsHandler) Patch(c *gin.Context) {
 		httputil.InternalError(c, "unable to update settings")
 		return
 	}
+	public.MaxUploadBytes = h.maxUploadBytes
 	httputil.JSON(c, http.StatusOK, public)
 }

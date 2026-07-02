@@ -75,6 +75,15 @@ func FromFileMoved(e volume.FileMovedEvent) Event {
 	})
 }
 
+func FromFileRenamed(e volume.FileRenamedEvent) Event {
+	return newEvent(EventFileRenamed, e.VolumeID.String(), map[string]any{
+		"volume_id":  e.VolumeID.String(),
+		"old_path":   e.OldPath,
+		"new_path":   e.NewPath,
+		"entry_type": e.EntryType,
+	})
+}
+
 func FromVolumeCreated(e volume.VolumeCreatedEvent) Event {
 	vol := e.Volume
 	return newEvent(EventVolumeCreated, vol.ID.String(), map[string]any{

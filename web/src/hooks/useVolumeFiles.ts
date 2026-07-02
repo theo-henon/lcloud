@@ -43,3 +43,25 @@ export function useDeleteFile(volumeId: string) {
     },
   });
 }
+
+export function useMoveFile(volumeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ fromPath, toPath }: { fromPath: string; toPath: string }) =>
+      api.moveFile(volumeId, fromPath, toPath),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["volumes", volumeId, "files"] });
+    },
+  });
+}
+
+export function useRenameFile(volumeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ path, newName }: { path: string; newName: string }) =>
+      api.renameFile(volumeId, path, newName),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["volumes", volumeId, "files"] });
+    },
+  });
+}

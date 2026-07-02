@@ -10,7 +10,8 @@ func (InstanceSettings) TableName() string {
 }
 
 type PublicSettings struct {
-	MaskDiskNames bool `json:"mask_disk_names"`
+	MaskDiskNames  bool  `json:"mask_disk_names"`
+	MaxUploadBytes int64 `json:"max_upload_bytes"`
 }
 
 type UpdateSettingsInput struct {

@@ -187,8 +187,8 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	fileHandler := NewFileHandler(cfg.FileService)
 	monitoringHandler := NewMonitoringHandler(cfg.MonitoringService)
 	searchHandler := NewSearchHandler(cfg.VolumeService, cfg.IndexManager)
-	settingsHandler := NewSettingsHandler(cfg.SettingsService)
-	adminSettingsHandler := NewAdminSettingsHandler(cfg.SettingsService)
+	settingsHandler := NewSettingsHandler(cfg.SettingsService, cfg.MaxUploadBytes)
+	adminSettingsHandler := NewAdminSettingsHandler(cfg.SettingsService, cfg.MaxUploadBytes)
 	pluginHandler := NewPluginHandler(cfg.PluginService)
 	taskHandler := NewTaskHandler(cfg.TaskService)
 
@@ -229,6 +229,8 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			protected.POST("/volumes/:id/files", fileHandler.Upload)
 			protected.GET("/volumes/:id/files/content", fileHandler.Download)
 			protected.GET("/volumes/:id/files/thumbnail", fileHandler.Thumbnail)
+			protected.PATCH("/volumes/:id/files/move", fileHandler.Move)
+			protected.PATCH("/volumes/:id/files/rename", fileHandler.Rename)
 			protected.DELETE("/volumes/:id/files", fileHandler.Delete)
 			protected.GET("/volumes/:id/search", searchHandler.Search)
 

@@ -178,6 +178,7 @@ export interface GlobalSearchResponse {
 
 export interface InstanceSettings {
   mask_disk_names: boolean;
+  max_upload_bytes: number;
 }
 
 export type TaskScope = "volume" | "global";
@@ -320,6 +321,61 @@ export async function apiRequest<T>(
   return (await response.json()) as T;
 }
 
+export type UploadProgress = {
+  loaded: number;
+  total: number;
+  percent: number;
+};
+
+async function uploadFileXHR(
+  volumeId: string,
+  file: File,
+  path: string,
+  onProgress?: (progress: UploadProgress) => void,
+): Promise<FileEntry> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("path", path);
+
+    xhr.upload.addEventListener("progress", (event) => {
+      if (!onProgress) {
+        return;
+      }
+      const total = event.lengthComputable ? event.total : file.size;
+      const loaded = event.loaded;
+      const percent = total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 0;
+      onProgress({ loaded, total, percent });
+    });
+
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(JSON.parse(xhr.responseText) as FileEntry);
+        return;
+      }
+      try {
+        const body = JSON.parse(xhr.responseText) as { error?: string; code?: string };
+        reject(new ApiError(body.error ?? "Request failed", xhr.status, body.code));
+      } catch {
+        reject(new ApiError("Request failed", xhr.status));
+      }
+    });
+
+    xhr.addEventListener("error", () => reject(new ApiError("Request failed", 0)));
+    xhr.addEventListener("abort", () => reject(new ApiError("Upload cancelled", 0)));
+
+    xhr.open("POST", `/api/volumes/${volumeId}/files`);
+    if (accessTokenProvider) {
+      const token = accessTokenProvider();
+      if (token) {
+        xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      }
+    }
+    xhr.send(formData);
+  });
+}
+
 export const api = {
   login(email: string, password: string) {
     return apiRequest<LoginResponse>("/api/auth/login", {
@@ -380,39 +436,26 @@ export const api = {
       body: JSON.stringify({ path }),
     });
   },
-  async uploadFile(volumeId: string, file: File, path = ".") {
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("path", path);
-
-    const headers = new Headers();
-    if (accessTokenProvider) {
-      const token = accessTokenProvider();
-      if (token) {
-        headers.set("Authorization", `Bearer ${token}`);
+  async uploadFile(
+    volumeId: string,
+    file: File,
+    path = ".",
+    onProgress?: (progress: UploadProgress) => void,
+  ) {
+    try {
+      return await uploadFileXHR(volumeId, file, path, onProgress);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401 && refreshHandler) {
+        const refreshed = await refreshHandler();
+        if (refreshed) {
+          return uploadFileXHR(volumeId, file, path, onProgress);
+        }
       }
+      throw error;
     }
-
-    const response = await fetch(`/api/volumes/${volumeId}/files`, {
-      method: "POST",
-      headers,
-      body: formData,
-    });
-
-    if (response.status === 401 && refreshHandler) {
-      const refreshed = await refreshHandler();
-      if (refreshed) {
-        return api.uploadFile(volumeId, file, path);
-      }
-    }
-
-    if (!response.ok) {
-      throw await parseError(response);
-    }
-    return (await response.json()) as FileEntry;
   },
-  fileContentUrl(volumeId: string, path: string) {
-    const params = new URLSearchParams({ path });
+  fileContentUrl(volumeId: string, path: string, disposition: "inline" | "attachment" = "attachment") {
+    const params = new URLSearchParams({ path, disposition });
     return `/api/volumes/${volumeId}/files/content?${params}`;
   },
   fileThumbnailUrl(volumeId: string, path: string) {
@@ -422,6 +465,18 @@ export const api = {
   deleteFile(volumeId: string, path: string) {
     const params = new URLSearchParams({ path });
     return apiRequest<void>(`/api/volumes/${volumeId}/files?${params}`, { method: "DELETE" });
+  },
+  moveFile(volumeId: string, fromPath: string, toPath: string) {
+    return apiRequest<FileEntry>(`/api/volumes/${volumeId}/files/move`, {
+      method: "PATCH",
+      body: JSON.stringify({ from_path: fromPath, to_path: toPath }),
+    });
+  },
+  renameFile(volumeId: string, path: string, newName: string) {
+    return apiRequest<FileEntry>(`/api/volumes/${volumeId}/files/rename`, {
+      method: "PATCH",
+      body: JSON.stringify({ path, new_name: newName }),
+    });
   },
   async downloadFile(volumeId: string, path: string, filename: string) {
     const headers = new Headers();
