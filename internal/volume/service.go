@@ -1,6 +1,7 @@
 package volume
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -29,6 +30,7 @@ type Service struct {
 	db           *gorm.DB
 	disks        *DiskRegistry
 	indexManager *indexer.IndexManager
+	events       EventPublisher
 }
 
 func NewService(db *gorm.DB, disks *DiskRegistry, indexManager *indexer.IndexManager) *Service {
@@ -37,6 +39,10 @@ func NewService(db *gorm.DB, disks *DiskRegistry, indexManager *indexer.IndexMan
 		disks:        disks,
 		indexManager: indexManager,
 	}
+}
+
+func (s *Service) SetEventPublisher(events EventPublisher) {
+	s.events = events
 }
 
 func (s *Service) List(claims *auth.Claims) ([]Volume, error) {
@@ -61,6 +67,10 @@ func (s *Service) Get(claims *auth.Claims, id uuid.UUID) (*Volume, error) {
 		return nil, err
 	}
 	return vol, nil
+}
+
+func (s *Service) GetByID(id uuid.UUID) (*Volume, error) {
+	return s.findVolume(id)
 }
 
 func (s *Service) Create(claims *auth.Claims, input CreateVolumeInput) (*Volume, error) {
@@ -110,6 +120,9 @@ func (s *Service) Create(claims *auth.Claims, input CreateVolumeInput) (*Volume,
 	if err := s.db.Create(vol).Error; err != nil {
 		_ = removeVolumeTree(rootPath)
 		return nil, err
+	}
+	if s.events != nil {
+		s.events.VolumeCreated(context.Background(), VolumeCreatedEvent{Volume: vol})
 	}
 	return vol, nil
 }
@@ -161,6 +174,9 @@ func (s *Service) Patch(claims *auth.Claims, id uuid.UUID, input PatchVolumeInpu
 	if err := s.db.Save(vol).Error; err != nil {
 		return nil, err
 	}
+	if s.events != nil {
+		s.events.VolumeUpdated(context.Background(), VolumeUpdatedEvent{Volume: vol})
+	}
 	return vol, nil
 }
 
@@ -189,7 +205,16 @@ func (s *Service) Delete(claims *auth.Claims, id uuid.UUID, force bool) error {
 	if err := removeVolumeTree(vol.RootPath); err != nil {
 		return err
 	}
-	return s.db.Delete(&Volume{}, "id = ?", vol.ID).Error
+	if err := s.db.Delete(&Volume{}, "id = ?", vol.ID).Error; err != nil {
+		return err
+	}
+	if s.events != nil {
+		s.events.VolumeDeleted(context.Background(), VolumeDeletedEvent{
+			VolumeID: vol.ID,
+			Name:     vol.Name,
+		})
+	}
+	return nil
 }
 
 func (s *Service) findVolume(id uuid.UUID) (*Volume, error) {

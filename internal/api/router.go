@@ -12,6 +12,7 @@ import (
 	"github.com/theo-henon/lcloud/internal/auth"
 	"github.com/theo-henon/lcloud/internal/indexer"
 	"github.com/theo-henon/lcloud/internal/monitoring"
+	"github.com/theo-henon/lcloud/internal/plugin"
 	"github.com/theo-henon/lcloud/internal/settings"
 	"github.com/theo-henon/lcloud/internal/volume"
 	"github.com/theo-henon/lcloud/pkg/httputil"
@@ -158,6 +159,7 @@ type RouterConfig struct {
 	FileService       *volume.FileService
 	MonitoringService *monitoring.Service
 	SettingsService   *settings.Service
+	PluginService     *plugin.Service
 	IndexManager      *indexer.IndexManager
 	MaxUploadBytes    int64
 	StaticFS          fs.FS
@@ -185,6 +187,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	searchHandler := NewSearchHandler(cfg.VolumeService, cfg.IndexManager)
 	settingsHandler := NewSettingsHandler(cfg.SettingsService)
 	adminSettingsHandler := NewAdminSettingsHandler(cfg.SettingsService)
+	pluginHandler := NewPluginHandler(cfg.PluginService)
 
 	api := router.Group("/api")
 	{
@@ -229,6 +232,11 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			protected.GET("/monitoring/overview", monitoringHandler.Overview)
 			protected.GET("/monitoring/volumes/:id/stats", monitoringHandler.VolumeStats)
 			protected.POST("/monitoring/volumes/:id/stats/refresh", monitoringHandler.RefreshVolumeStats)
+
+			protected.GET("/plugins", pluginHandler.List)
+			protected.GET("/plugins/logs", pluginHandler.Logs)
+			protected.GET("/plugins/:id", pluginHandler.Get)
+			protected.PATCH("/plugins/:id", auth.RequireAdmin(), pluginHandler.Patch)
 		}
 	}
 

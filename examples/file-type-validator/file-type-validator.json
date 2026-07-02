@@ -1,0 +1,9 @@
+{
+  "id": "file-type-validator",
+  "name": "File Type Validator",
+  "version": "1.0.0",
+  "description": "Validates uploaded files against volume extension filters",
+  "author": "lcloud",
+  "subscribe": ["file.uploaded"],
+  "emit": ["validation.failed", "validation.passed"]
+}

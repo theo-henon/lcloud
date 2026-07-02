@@ -7,6 +7,7 @@ import { LoginPage } from "@/pages/LoginPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { MonitoringPage } from "@/pages/MonitoringPage";
 import { SettingsPage } from "@/pages/SettingsPage";
+import { PluginsPage } from "@/pages/PluginsPage";
 import { PlaceholderPage } from "@/pages/PlaceholderPage";
 import { VolumeDetailPage } from "@/pages/VolumeDetailPage";
 import { VolumesPage } from "@/pages/VolumesPage";
@@ -30,16 +31,7 @@ function AppRoutes() {
           <Route path="/volumes" element={<VolumesPage />} />
           <Route path="/volumes/:id" element={<VolumeDetailPage />} />
           <Route path="/monitoring" element={<MonitoringPage />} />
-          <Route
-            path="/plugins"
-            element={
-              <PlaceholderPage
-                title="Plugins"
-                phase="Phase 1.3"
-                description="Extend lcloud with external plugin binaries."
-              />
-            }
-          />
+          <Route path="/plugins" element={<PluginsPage />} />
           <Route
             path="/tasks"
             element={

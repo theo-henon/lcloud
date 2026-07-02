@@ -1,16 +1,21 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/theo-henon/lcloud/internal/api"
 	"github.com/theo-henon/lcloud/internal/auth"
 	"github.com/theo-henon/lcloud/internal/config"
 	"github.com/theo-henon/lcloud/internal/indexer"
 	"github.com/theo-henon/lcloud/internal/monitoring"
+	"github.com/theo-henon/lcloud/internal/plugin"
 	"github.com/theo-henon/lcloud/internal/settings"
 	"github.com/theo-henon/lcloud/internal/volume"
 	"gorm.io/driver/postgres"
@@ -31,7 +36,14 @@ func main() {
 		log.Fatalf("database: %v", err)
 	}
 
-	if err := db.AutoMigrate(&auth.User{}, &auth.RefreshToken{}, &volume.Volume{}, &settings.InstanceSettings{}); err != nil {
+	if err := db.AutoMigrate(
+		&auth.User{},
+		&auth.RefreshToken{},
+		&volume.Volume{},
+		&settings.InstanceSettings{},
+		&plugin.Plugin{},
+		&plugin.PluginLogEntry{},
+	); err != nil {
 		log.Fatalf("migrate: %v", err)
 	}
 
@@ -51,6 +63,16 @@ func main() {
 	monitoringService := monitoring.NewService(volumeService, diskRegistry, settingsService)
 	fileService := volume.NewFileService(volumeService, indexManager, cfg.MaxUploadBytes, monitoringService.StatsCache())
 
+	pluginService := plugin.NewService(db, cfg.PluginsPath, volumeService, nil)
+	volumeService.SetEventPublisher(pluginService.Publisher())
+	fileService.SetEventPublisher(pluginService.Publisher())
+
+	ctx := context.Background()
+	if err := pluginService.Start(ctx); err != nil {
+		log.Fatalf("plugin startup: %v", err)
+	}
+	defer pluginService.Stop()
+
 	staticFS, err := fs.Sub(staticEmbed, "static")
 	if err != nil {
 		log.Fatalf("static fs: %v", err)
@@ -63,6 +85,7 @@ func main() {
 		FileService:       fileService,
 		MonitoringService: monitoringService,
 		SettingsService:   settingsService,
+		PluginService:     pluginService,
 		IndexManager:      indexManager,
 		MaxUploadBytes:    cfg.MaxUploadBytes,
 		StaticFS:          staticFS,
@@ -70,8 +93,18 @@ func main() {
 	})
 
 	addr := ":" + cfg.AppPort
+	server := &http.Server{Addr: addr, Handler: router}
+
+	go func() {
+		ch := make(chan os.Signal, 1)
+		signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
+		<-ch
+		pluginService.Stop()
+		_ = server.Close()
+	}()
+
 	log.Printf("lcloud listening on %s", addr)
-	if err := http.ListenAndServe(addr, router); err != nil {
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("server: %v", err)
 	}
 }

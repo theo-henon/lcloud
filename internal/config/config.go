@@ -22,6 +22,7 @@ type Config struct {
 	MaxUploadBytes         int64
 	AppPort                string
 	GinMode                string
+	PluginsPath            string
 }
 
 func Load() (*Config, error) {
@@ -38,6 +39,7 @@ func Load() (*Config, error) {
 		JWTExpiryHours:         getEnvInt("JWT_EXPIRY_HOURS", 24),
 		RefreshTokenExpiryDays: getEnvInt("REFRESH_TOKEN_EXPIRY_DAYS", 7),
 		MaxUploadBytes:         getEnvInt64("MAX_UPLOAD_BYTES", defaultMaxUploadBytes),
+		PluginsPath:            getEnv("PLUGINS_PATH", "./plugins"),
 	}
 
 	if cfg.DatabaseURL == "" {

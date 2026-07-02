@@ -1,6 +1,7 @@
 package volume
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
@@ -43,6 +44,7 @@ type FileService struct {
 	indexManager     *indexer.IndexManager
 	maxUploadBytes   int64
 	statsInvalidator StatsInvalidator
+	events           EventPublisher
 }
 
 func NewFileService(volumes *Service, indexManager *indexer.IndexManager, maxUploadBytes int64, statsInvalidator StatsInvalidator) *FileService {
@@ -55,6 +57,10 @@ func NewFileService(volumes *Service, indexManager *indexer.IndexManager, maxUpl
 		maxUploadBytes:   maxUploadBytes,
 		statsInvalidator: statsInvalidator,
 	}
+}
+
+func (s *FileService) SetEventPublisher(events EventPublisher) {
+	s.events = events
 }
 
 func (s *FileService) invalidateStats(rootPath string) {
@@ -303,6 +309,17 @@ func (s *FileService) Upload(claims *auth.Claims, volumeID uuid.UUID, relDir, fi
 
 	s.invalidateStats(vol.RootPath)
 
+	if s.events != nil {
+		s.events.FileUploaded(context.Background(), FileUploadedEvent{
+			VolumeID:     vol.ID,
+			Name:         filename,
+			RelativePath: targetRel,
+			MimeType:     mimeType,
+			SizeBytes:    written,
+			Filters:      vol.Filters,
+		})
+	}
+
 	return &FileEntry{
 		Name:         filename,
 		Path:         targetRel,
@@ -405,6 +422,14 @@ func (s *FileService) Delete(claims *auth.Claims, volumeID uuid.UUID, relPath st
 		return err
 	}
 	s.invalidateStats(vol.RootPath)
+	if s.events != nil {
+		size := info.Size()
+		s.events.FileDeleted(context.Background(), FileDeletedEvent{
+			VolumeID:     vol.ID,
+			RelativePath: filepath.ToSlash(cleanRelativePath(relPath)),
+			SizeBytes:    size,
+		})
+	}
 	return nil
 }
 
