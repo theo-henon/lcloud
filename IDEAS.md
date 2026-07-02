@@ -7,6 +7,50 @@
 
 ---
 
+## Post-MVP — adding implementation ideas
+
+The MVP is shipped. New work is **feature-scoped** (`/spec` → `/build` → `/ship`), not phase-based.
+When you discover a gap while using the product — placeholder page, API without UI, deferred behavior —
+**capture it here first** before writing a spec.
+
+### When to add an entry
+
+- A sidebar route or page still shows **Soon** or a placeholder after MVP
+- Backend capability exists but has **no web UI** (or the reverse)
+- Something was **explicitly deferred** in a phase spec and is now worth scheduling
+- Exploration surfaced a feature that does **not** belong in VISION.md (tactical, not strategic)
+
+Do **not** add entries for bugs, typos, or one-line fixes — use `/build` or `fix/*` directly.
+
+### Entry template
+
+Each idea uses the same shape (see **In-app notification system** or **User management UI** below):
+
+```markdown
+### Short title
+**Context:** What exists today, what is missing, where it was deferred.
+**Value:** Why it matters for the operator (plain language).
+**Estimated effort:** Quick | Medium | Heavy
+**Dependencies:** Shipped modules or prior ideas
+**Date:** YYYY-MM-DD
+
+**Possible scope (post-MVP `/spec`):**  ← optional, for ideas ready to spec soon
+- Backend / API bullets
+- UI bullets
+- Out of scope for v1
+```
+
+### Lifecycle
+
+1. **Park** — append a new entry to `## Ideas` below (English, same template).
+2. **Prioritize** — pick when ready; no ordering required in this file.
+3. **Spec** — run `/spec` on the idea title + context; agent reads VISION.md, docs/project.md, and this entry.
+4. **Ship** — implementation removes or archives the entry once the feature is merged (or move to VISION.md if it changed product direction).
+
+Strategic shifts (new audience, new deployment model) → **VISION.md**, not IDEAS.md.
+
+---
+
 ## Ideas
 
 ### FTP server per volume
@@ -138,6 +182,20 @@
 - UI: toast on new alert, sidebar/header bell with history
 - Subscribers: `volume.alert.usage`, `task.failed`, plugin custom events
 - Out of scope for v1 of this idea: email, push, SMS (those stay plugin/webhook territory)
+
+---
+
+### User management UI (admin)
+**Context:** Phase 0 shipped admin-only user creation via API (`POST /api/admin/users`) and a placeholder page at `/settings/users` (sidebar link with "Soon" badge). Post-MVP, admins still create users via curl or external tooling — no list, role change, or disable flow in the web UI.
+**Value:** Manage team or family accounts from the control panel: see who has access, create users, assign `admin` / `user` roles, and revoke access without leaving the browser.
+**Estimated effort:** Medium
+**Dependencies:** Phase 0 auth (JWT, roles, admin seed); MVP complete
+**Date:** 2026-07-02
+
+**Possible scope (post-MVP `/spec`):**
+- Backend: `GET /api/admin/users`, optional `PATCH` (role, disable) and `DELETE` or soft-disable
+- UI: replace placeholder at `/settings/users` — user table, create-user form, role badges, admin-only route (already wired)
+- Out of scope for v1 of this idea: self-service signup, password reset email, OAuth/SSO, per-volume ACL (volume ownership is separate)
 
 ---
 
