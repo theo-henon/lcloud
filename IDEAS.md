@@ -240,6 +240,30 @@ Strategic shifts (new audience, new deployment model) → **VISION.md**, not IDE
 
 ---
 
+### Monitoring dashboard — visual upgrade
+**Context:** MVP monitoring (`/monitoring`) shows disk cards, a volume table, and per-volume stats (used/quota, category bars, top MIME types). All usage bars use the same primary yellow — no color signal when a quota is nearly full. Data is **snapshot-only** (stats cache per volume, no history over time). The `alert_usage` task can fire on the event bus when a threshold is exceeded, but the monitoring UI does not surface alert state or tie into a notification center yet.
+**Value:** Understand disk and volume health at a glance: colored quota bars (green → yellow → red), charts for file-type breakdown, and optional trends so operators see problems before uploads fail — without reading raw numbers.
+**Estimated effort:** Medium (UI + thresholds) to Heavy (if usage history / time-series is included)
+**Dependencies:** Phase 1.2 monitoring (shipped); optional link to in-app notification idea for quota alerts
+**Date:** 2026-07-02
+
+**Operator direction:**
+- **Quota color gradient** — progress bar and/or stat text shifts by usage % (e.g. &lt;70% emerald, 70–85% warning, 85–95% orange, ≥95% rose); same logic on disk cards, volume list, and volume detail panel
+- **Charts** — donut or bar chart for category breakdown (images, videos, documents…); optional stacked view of volumes per physical disk
+- **At-a-glance clarity** — sort or badge volumes "at risk" when quota is high; show remaining space prominently, not only used bytes
+
+**Possible scope (post-MVP `/spec`):**
+- **UI v1 (no new backend):** threshold-colored bars everywhere quotas appear; Recharts (or similar) for category/disk charts; global summary row (total used / total quota / volumes in warning)
+- **UI v2:** align colors with `alert_usage` threshold_percent from tasks (or a default 80/90/95% palette)
+- **History (heavier):** periodic usage snapshots (PostgreSQL or volume cache) → line chart "usage over 7/30 days"; growth hint ("full in ~N days" if trend stable)
+- **Cross-links:** click volume in chart → volume detail; surface last `volume.alert.usage` event if notification system exists
+- **Out of scope for v1:** Prometheus/Grafana export, per-file analytics, real-time streaming metrics
+
+**Follow-up to validate post-ship:**
+- Is usage **history** worth the storage/complexity, or are colored snapshots enough for homelab scale?
+
+---
+
 ### Webhook notifications macro
 **Context:** Post-MVP macro — send an HTTP POST to an external URL on a condition (e.g. volume > 90% full).
 **Value:** Integration with external systems (Slack, Discord, custom automation webhooks).
