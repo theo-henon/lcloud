@@ -33,6 +33,7 @@ import { api } from "@/lib/api";
 import type { FileEntry } from "@/lib/api";
 import { joinPath, fileName as baseName } from "@/lib/explorerPaths";
 import { resolveFileOpener } from "@/lib/fileOpeners/registry";
+import { formatFileOpError } from "@/lib/uploadErrors";
 import { useAuthStore } from "@/store/auth";
 import { cn } from "@/lib/utils";
 
@@ -102,6 +103,7 @@ export function VolumeExplorer({ volumeId, currentPath, onPathChange }: VolumeEx
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
+  const [moveError, setMoveError] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ entry: FileEntry; content: ReactNode } | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
@@ -167,7 +169,10 @@ export function VolumeExplorer({ volumeId, currentPath, onPathChange }: VolumeEx
       if (destination === fromPath) {
         return;
       }
-      void moveFile.mutateAsync({ fromPath, toPath: destination });
+      setMoveError(null);
+      void moveFile
+        .mutateAsync({ fromPath, toPath: destination })
+        .catch((error) => setMoveError(formatFileOpError(error)));
     },
     [moveFile],
   );
@@ -210,6 +215,15 @@ export function VolumeExplorer({ volumeId, currentPath, onPathChange }: VolumeEx
             />
 
             <UploadQueue items={items} onDismiss={dismissItem} onCancel={cancelQueued} />
+
+            {moveError ? (
+              <div className="flex items-start justify-between gap-3 rounded-lg border border-accent-rose/40 bg-surface-soft px-4 py-3 text-sm">
+                <p className="text-accent-rose">{moveError}</p>
+                <Button variant="ghost" onClick={() => setMoveError(null)}>
+                  Dismiss
+                </Button>
+              </div>
+            ) : null}
 
             {showNewFolder ? (
               <Card className="flex flex-wrap items-end gap-3 p-4">
