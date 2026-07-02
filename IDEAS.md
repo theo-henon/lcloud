@@ -354,6 +354,137 @@ Strategic shifts (new audience, new deployment model) → **VISION.md**, not IDE
 
 ---
 
+## Cloud table-stakes gaps (vs OneDrive / Drive / Dropbox / Nextcloud)
+
+> Competitive scan 2026-07-02 — standard file-cloud features lcloud MVP lacks. Complements operator-driven ideas above (explorer redesign, Spotlight, etc.).
+
+### Trash / recycle bin
+**Context:** OneDrive, Google Drive, Dropbox, and Nextcloud all move deleted files to a **Trash** first (recoverable for a period). lcloud **permanently deletes** on confirm (`DELETE /api/volumes/:id/files`) — no undo, no retention folder.
+**Value:** Recover from accidental deletes; matches user expectations from every major cloud.
+**Estimated effort:** Medium
+**Dependencies:** Phase 1.1 file ops; volume explorer redesign (Trash view in UI)
+**Date:** 2026-07-02
+
+**Possible scope (post-MVP `/spec`):**
+- Soft-delete to `{volume}/.trash/` or PostgreSQL tombstone + blob retention; `POST restore`, auto-purge after N days (task or setting)
+- UI: Trash pseudo-folder or sidebar entry; empty trash action
+- Event bus: `file.trashed`, `file.restored`
+
+---
+
+### In-browser file preview (lightbox)
+**Context:** Drive and OneDrive open images, PDFs, and video in a **built-in viewer**; lcloud only shows a small list thumbnail or forces **download**.
+**Value:** Read and inspect files without leaving the browser or saving locally.
+**Estimated effort:** Medium
+**Dependencies:** Phase 1.1 file content + thumbnail API; iconography pass
+**Date:** 2026-07-02
+
+**Possible scope (post-MVP `/spec`):**
+- Lightbox/modal: images (full res), PDF (browser embed or pdf.js), video/audio (`<video>` / `<audio>`)
+- Open from grid view, list double-click, Spotlight result
+- Out of scope v1: Office editing, annotation, collaborative viewing
+
+---
+
+### Multi-file selection and bulk actions
+**Context:** All major clouds support **checkbox selection** and batch delete, download, move. lcloud acts on **one file at a time** in the UI.
+**Value:** Manage large folders efficiently; prerequisite for a credible explorer redesign.
+**Estimated effort:** Medium
+**Dependencies:** Volume explorer redesign; move/delete/download APIs (bulk endpoints or parallel calls)
+**Date:** 2026-07-02
+
+**Possible scope (post-MVP `/spec`):**
+- Shift/Cmd-click, select all; toolbar: Delete, Download (zip if multiple), Move to folder
+- Backend: optional `POST /files/bulk-delete` for atomic quota updates
+
+---
+
+### Multi-file upload with progress queue
+**Context:** Drive/OneDrive accept **many files and folders** in one drop with per-file progress bars. lcloud UI uploads **one file** per action (`files[0]` in `VolumeDetailPage`).
+**Value:** Everyday photo/document uploads without repeating the flow.
+**Estimated effort:** Medium
+**Dependencies:** Volume explorer redesign (drop target); existing `POST /files` per file
+**Date:** 2026-07-02
+
+**Possible scope (post-MVP `/spec`):**
+- Queue UI: progress per file, cancel, retry failed; concurrent uploads (limit 3–5)
+- Folder upload via `webkitdirectory` where supported
+- Out of scope v1: tus/resumable multipart for huge files (separate idea if needed)
+
+---
+
+### Copy / duplicate file (in-volume)
+**Context:** Drive « Make a copy », Explorer Ctrl+C/V — duplicate within the same folder or elsewhere. lcloud has **move** internally (`MoveFileInternal`) but no user-facing **copy** in UI or web API.
+**Value:** Duplicate templates, backups ad hoc, workflows without download/re-upload.
+**Estimated effort:** Quick to Medium
+**Dependencies:** Volume layer copy primitive; explorer context menu
+**Date:** 2026-07-02
+
+---
+
+### File details side panel
+**Context:** Drive/OneDrive show a **Details** pane: size, dates, type, owner, checksum. lcloud exposes size/modified in table columns only; SHA256 is indexed but not shown in UI.
+**Value:** Inspect metadata without downloading; trust/verify files (hash display).
+**Estimated effort:** Quick
+**Dependencies:** Volume explorer redesign; existing metadata cache / Bleve index
+**Date:** 2026-07-02
+
+---
+
+### Recent files and favorites (starred)
+**Context:** Google Drive homepage highlights **Recent** and **Starred**; lcloud dashboard is empty and there is no per-user file pinning or activity feed.
+**Value:** Jump back to last-worked files; personal shortcuts across volumes.
+**Estimated effort:** Medium
+**Dependencies:** Dashboard widgets idea; PostgreSQL `user_favorites`; recent = index by `modified_at` or event log
+**Date:** 2026-07-02
+
+**Possible scope (post-MVP `/spec`):**
+- `GET /api/files/recent`, `POST/DELETE /api/files/favorite`
+- Widgets on `/dashboard` + optional sidebar section
+- Cross-link **Unified Spotlight search** (recent as default palette state)
+
+---
+
+### Download folder as ZIP
+**Context:** OneDrive/Dropbox/Nextcloud let users **download a folder as ZIP**. lcloud supports single-file download only.
+**Value:** Export a project folder, backup a subtree, share offline without sync client.
+**Estimated effort:** Medium
+**Dependencies:** Phase 1.1 file read; streaming zip from Go (`archive/zip`)
+**Date:** 2026-07-02
+
+---
+
+### In-instance volume sharing (per-user access)
+**Context:** Google Drive **Share with specific people** on the same tenant. lcloud: **one owner per volume**; admin sees all, user sees own — no grant access to a colleague's volume. Distinct from public links (out of scope per VISION).
+**Value:** Family/small team on one lcloud: share a « Photos » volume without duplicating data or making everyone admin.
+**Estimated effort:** Heavy
+**Dependencies:** User management UI; ACL model (volume_members join table); authorize all file/volume APIs
+**Date:** 2026-07-02
+
+**Product constraint:** sharing **within the instance only** (existing admin-provisioned accounts) — not anonymous public URLs.
+
+---
+
+### Per-file version history
+**Context:** OneDrive and Drive keep **previous versions** of a file (restore older copy). lcloud **Backup and archiving** idea covers volume-level backup, not per-file revision timeline.
+**Value:** Undo overwrite (« I saved the wrong version ») without restoring an entire volume.
+**Estimated effort:** Heavy
+**Dependencies:** Volume file ops; storage strategy (copy-on-write snapshots or `{file}.v{n}` sidecar)
+**Date:** 2026-07-02
+
+**Relationship:** complements **Trash** (accidental delete) vs **Versions** (intentional overwrite).
+
+---
+
+### User profile — change own password
+**Context:** Every cloud has **Account → Security → change password**. lcloud: admin can reset via future Users UI; no **self-service** password change on Settings page.
+**Value:** Users rotate credentials without admin intervention.
+**Estimated effort:** Quick
+**Dependencies:** Auth service (`ChangePassword(current, new)`); Settings page UI
+**Date:** 2026-07-02
+
+---
+
 ### Webhook notifications macro
 **Context:** Post-MVP macro — send an HTTP POST to an external URL on a condition (e.g. volume > 90% full).
 **Value:** Integration with external systems (Slack, Discord, custom automation webhooks).
