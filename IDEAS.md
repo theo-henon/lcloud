@@ -117,7 +117,7 @@ Strategic shifts (new audience, new deployment model) → **VISION.md**, not IDE
 ---
 
 ### Full-text content search via Bleve
-**Context:** Discussed during indexer design — Bleve is in use for metadata search (MVP). Content extraction (text files, PDFs, OCR for images, audio/video metadata) deferred.
+**Context:** Discussed during indexer design — Bleve is in use for metadata search (MVP). Content extraction (text files, PDFs, OCR for images, audio/video metadata) deferred. Powers the **Content** category inside **Unified Spotlight search** — same palette, searches inside file bodies, not just names/paths.
 **Value:** Search inside file contents, not just filenames and metadata.
 **Estimated effort:** Medium (text/PDF) to Heavy (OCR pipeline)
 **Dependencies:** Phase 1.2 (Bleve running), content extraction libraries
@@ -313,6 +313,44 @@ Strategic shifts (new audience, new deployment model) → **VISION.md**, not IDE
 - Roll out in passes: sidebar + header first, then volume/file browser, then tasks/plugins
 - Accessibility: decorative icons `aria-hidden`; icon-only buttons keep `aria-label`
 - **Out of scope:** custom brand icon set, animated icons, emoji-as-icons
+
+---
+
+### Unified Spotlight search (command palette)
+**Context:** MVP search is **files-only**: `GlobalSearch` lives in the sidebar (Bleve metadata across volumes). Operator direction (macOS **Spotlight** reference): a **central search** invoked from anywhere — keyboard shortcut (e.g. `⌘K` / `Ctrl+K`) or header button — overlay modal, one query box, results grouped by **category**, not a deep file-only hunt in the sidebar.
+**Value:** "Search everything in lcloud" from one place: jump to a file, task, plugin, volume, or page. Admin and user both use it; results respect existing permissions (user sees own volumes/tasks only). Familiar mental model like Spotlight / VS Code command palette / Raycast.
+**Estimated effort:** Medium (v1 categories + UI) to Heavy (content search + unified backend index)
+**Dependencies:** Phase 1.1 search API (files); tasks/plugins/volumes list APIs (shipped); **Full-text content search via Bleve** for content category; iconography pass for result icons
+**Date:** 2026-07-02
+
+**Search categories (decomposed):**
+
+| Category | What it finds | MVP backend today |
+|---|---|---|
+| **Files** | Filenames, paths, MIME (all accessible volumes) | `GET /api/search` ✅ |
+| **Content** | Text inside files (PDF, txt…) | ❌ → Full-text content search idea |
+| **Volumes** | Volume name, disk | `GET /api/volumes` — client filter or new endpoint |
+| **Tasks** | Task name, macro | `GET /api/tasks` — client filter or new endpoint |
+| **Plugins** | Plugin name, status | `GET /api/plugins` — client filter or new endpoint |
+| **Navigation** | Pages / actions ("Monitoring", "Settings", "New volume") | Static registry in frontend |
+| **Users** *(admin)* | Account email | ❌ until User management UI API |
+
+**Operator direction:**
+- **Spotlight-style overlay** — dim background, centered search field, instant results below grouped by category ("Files", "Tasks", "Plugins"…)
+- **Keyboard-first** — global shortcut opens palette; ↑↓ to move, Enter to open, Esc to close
+- **Simple default** — one query searches **all categories**; optional pills/tabs to narrow ("Files only", "Tasks only")
+- **Not replacing** full Monitoring/Tasks pages — quick jump, not a second UI for everything
+
+**Possible scope (post-MVP `/spec`):**
+- **Phase A:** Command palette UI + Files + Navigation + client-side filter on volumes/tasks/plugins lists
+- **Phase B:** unified `GET /api/search/unified?q=` aggregating categories server-side (faster, consistent ranking)
+- **Phase C:** Content category when full-text indexing ships
+- Remove or slim sidebar `GlobalSearch` once palette is primary entry
+- **Out of scope:** natural language / AI answers, searching outside lcloud, plugin-provided search sources (until plugin API extends)
+
+**Related ideas:**
+- **Full-text content search via Bleve** — powers the **Content** category inside the same palette
+- **Control panel iconography pass** — category icons in result rows
 
 ---
 
