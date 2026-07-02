@@ -192,10 +192,16 @@ Strategic shifts (new audience, new deployment model) → **VISION.md**, not IDE
 **Dependencies:** Phase 0 auth (JWT, roles, admin seed); MVP complete
 **Date:** 2026-07-02
 
+**Product constraint (not up for debate in this idea):**
+- **Admin-provisioned accounts only** — the admin creates every user account; there is no public signup, no invitation link, no self-registration flow
+- **No OAuth / social login** (Google, GitHub, etc.) — email + password only, aligned with self-hosted homelab use
+- Login page stays **sign-in only**; account creation lives exclusively on `/settings/users` (admin)
+
 **Possible scope (post-MVP `/spec`):**
-- Backend: `GET /api/admin/users`, optional `PATCH` (role, disable) and `DELETE` or soft-disable
-- UI: replace placeholder at `/settings/users` — user table, create-user form, role badges, admin-only route (already wired)
-- Out of scope for v1 of this idea: self-service signup, password reset email, OAuth/SSO, per-volume ACL (volume ownership is separate)
+- Backend: `GET /api/admin/users`, `PATCH` (role, disable), optional soft-disable; admin-initiated password reset (set new password — no email pipeline)
+- UI: replace placeholder at `/settings/users` — user table, **admin-only create-user form**, role badges
+- Safeguards: cannot demote/delete the last admin; optional disable instead of hard delete
+- **Explicitly out of scope** (this project, for now): self-service signup, registration page, OAuth/SSO, password-reset email, per-volume ACL (volume ownership is a separate idea)
 
 ---
 
