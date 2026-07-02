@@ -16,6 +16,7 @@ import (
 	"github.com/theo-henon/lcloud/internal/monitoring"
 	"github.com/theo-henon/lcloud/internal/plugin"
 	"github.com/theo-henon/lcloud/internal/settings"
+	"github.com/theo-henon/lcloud/internal/task"
 	"github.com/theo-henon/lcloud/internal/volume"
 	"gorm.io/gorm"
 )
@@ -27,7 +28,7 @@ func setupPluginRouter(t *testing.T) (*gin.Engine, string) {
 	dsn := "file:" + t.Name() + "?mode=memory&cache=private"
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&auth.User{}, &auth.RefreshToken{}, &volume.Volume{}, &settings.InstanceSettings{}, &plugin.Plugin{}, &plugin.PluginLogEntry{}))
+	require.NoError(t, db.AutoMigrate(&auth.User{}, &auth.RefreshToken{}, &volume.Volume{}, &settings.InstanceSettings{}, &plugin.Plugin{}, &plugin.PluginLogEntry{}, &task.Task{}, &task.TaskRun{}))
 
 	service := auth.NewService(db, "01234567890123456789012345678901", 24, 7)
 	require.NoError(t, service.SeedAdmin("admin@example.com", "adminpass1"))
@@ -47,6 +48,10 @@ func setupPluginRouter(t *testing.T) (*gin.Engine, string) {
 	monitoringService := monitoring.NewService(volumeService, diskRegistry, settingsService)
 	fileService := volume.NewFileService(volumeService, indexManager, cfg.MaxUploadBytes, monitoringService.StatsCache())
 	pluginService := plugin.NewService(db, t.TempDir(), volumeService, nil)
+	volumeService.SetEventPublisher(pluginService.Publisher())
+	macroOps := volume.NewMacroOps(volumeService, indexManager, monitoringService.StatsCache(), pluginService.Publisher())
+	taskExecutor := task.NewExecutor(macroOps, monitoringService, volumeService, pluginService)
+	taskService := task.NewService(db, volumeService, taskExecutor, pluginService)
 
 	router := NewRouter(RouterConfig{
 		AuthService:       service,
@@ -56,6 +61,7 @@ func setupPluginRouter(t *testing.T) (*gin.Engine, string) {
 		MonitoringService: monitoringService,
 		SettingsService:   settingsService,
 		PluginService:     pluginService,
+		TaskService:       taskService,
 		IndexManager:      indexManager,
 		MaxUploadBytes:    cfg.MaxUploadBytes,
 		GinMode:           gin.TestMode,

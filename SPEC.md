@@ -1,53 +1,55 @@
-# Spec: Phase 1.3 — Plugin system
+# Spec: Phase 1.4 — Task system
 
 > **Status:** Draft — pending review
-> **Scope:** Event bus, go-plugin runtime, plugin registry, plugin manager UI, example `file-type-validator` plugin, SDK stub.
-> **Prerequisite:** Phase 1.1 complete (volumes, files, filters, layout with `plugins/` dir). Phase 1.2 complete (monitoring, search) recommended but not blocking for plugin wiring.
-> **Sources:** [STARTUP.md](./STARTUP.md#phase-13--plugin-system), [VISION.md](./VISION.md), [docs/project.md](./docs/project.md)
+> **Scope:** Task scheduler (gocron), macro executor, predefined macro vocabulary, task CRUD API, task history, Tasks UI. **MVP milestone** — last bootstrap phase.
+> **Prerequisite:** Phase 1.1 (volumes, files, metadata cache, Bleve indexer), Phase 1.2 (monitoring, `ComputeStats`, stats cache), Phase 1.3 (event bus, `task.executed` / `task.failed` / `volume.alert.usage` event types defined).
+> **Sources:** [STARTUP.md](./STARTUP.md#phase-14--task-system), [VISION.md](./VISION.md), [docs/project.md](./docs/project.md)
 
 ---
 
 ## Assumptions (correct me now or I proceed)
 
-1. **Phases 1.1–1.2 are shipped** — volume CRUD, file upload/delete, `.volume.json` filters, volume layout includes `./plugins/` and `./logs/`.
-2. **`internal/plugin/` is greenfield** — module referenced in docs but not yet created; Phase 1.3 creates it entirely.
-3. **Plugins are instance-wide binaries** — admin drops executables into a host `plugins/` directory; discovery happens at startup (UC3.1 requires restart, no hot-reload in MVP).
-4. **Core upload filter stays synchronous** — Phase 1.1 `ValidateExtension` still rejects bad files before save; plugins receive `file.uploaded` only after a successful upload. The example plugin is a **post-upload audit** (demonstrates the bus), not a replacement for core validation.
-5. **`file.moved` / `file.renamed` are defined but not emitted yet** — no move/rename API exists in Phase 1.1; event types are registered on the bus, emission deferred until a move operation ships (Phase 1.4 `move_files` macro or a dedicated file API).
-6. **`task.executed` is defined but not emitted yet** — task scheduler is Phase 1.4; bus accepts the event type, emission wired in 1.4.
-7. **Plugin logs are stored in PostgreSQL for UI** — recent activity feed in the plugin manager; optional mirror to `{volume}/logs/` is post-MVP. Keeps `./logs/` directory structure intact without new on-disk schema in 1.3.
-8. **Per-volume plugin data dirs are created lazily** — `{volume.root}/plugins/{plugin-id}/` is created the first time a plugin handles an event for that volume (no separate "install per volume" UI in MVP).
-9. **Enable/disable is admin-only** — toggling a plugin starts/stops its subprocess and controls event delivery.
-10. **One subprocess per plugin binary** — go-plugin spawns an isolated child process; crash marks plugin `error` without taking down lcloud core.
-11. **Plugin API is read-mostly for MVP** — plugins may read volume config (filters, name), emit custom events, write to their volume data dir, and append log entries. No file delete/move via plugin API in 1.3.
-12. **ADR required before merge** — plugin interface contract and event bus design documented in `docs/adr/` via `documentation-and-adrs`.
+1. **Phases 1.1–1.3 are shipped** — volume CRUD, file upload/delete, monitoring stats, plugin event bus operational.
+2. **`internal/task/` is greenfield** — module referenced in docs but not yet created; Phase 1.4 creates it entirely.
+3. **gocron v2 is new** — `github.com/go-co-op/gocron/v2` added during `/build`; not yet in `go.mod`.
+4. **Cron schedules use UTC** — server timezone is not exposed in MVP; UI displays "UTC" next to cron helpers.
+5. **Manual run is in MVP** — UC4.2 allows triggering a task immediately via API/UI (`POST /tasks/:id/run`), in addition to scheduled runs.
+6. **Volume-scoped tasks are the primary path** — UC4.1 creates a task bound to one volume; global scope is admin-only and limited to macros that iterate volumes (see Macro catalog).
+7. **Macro file ops bypass JWT but stay in `internal/volume/`** — tasks call new internal methods (`MoveFileInternal`, `DeleteFileInternal`) that reuse metadata/index/thumbnail/event logic; no auth claims required because the task record already validated ownership at CRUD time.
+8. **`file.moved` is emitted by move macros** — `move_files`, `sort_by_type`, `sort_by_date` emit `file.moved` per affected file; first emission site in the codebase.
+9. **`rebuild_index` re-indexes from metadata cache** — `BleveIndexer.Rebuild` clears the index; macro then walks `./cache/metadata/` and re-indexes all records (metadata is source for rebuild, not a fresh disk walk).
+10. **`clear_cache` does not wipe Bleve index** — STARTUP specifies thumbnails + metadata cache only; search index remains (use `rebuild_index` separately if needed).
+11. **Task history in PostgreSQL** — last run time, status, affected file count, error message; not written to `{volume}/logs/` in MVP (directory exists but stays empty).
+12. **`alert_usage` writes to task run history + event bus** — emits `volume.alert.usage`; no separate on-disk alert log in MVP.
+13. **Macro vocabulary is closed** — no new macro names without a `/spec` cycle (AGENTS.md).
+14. **ADR required before merge** — task model, scheduler wiring, macro executor boundaries documented in `docs/adr/` via `documentation-and-adrs`.
+15. **Dry-run mode in MVP** — destructive macros accept `dry_run: true`; preview impact without touching files (see Macro catalog + OQ1).
 
 ---
 
 ## Objective
 
-Build the foundational plugin infrastructure so users can extend lcloud with external binaries that react to volume events — the extensibility layer described in VISION.md.
+Build the task scheduler and connect it to predefined macros operating on volumes — the automation layer described in VISION.md. Completing Phase 1.4 **reaches the lcloud MVP**.
 
-**Who:** Self-hosters and developers who want to customize lcloud behavior without forking the core.
+**Who:** Self-hosters who want recurring maintenance (cleanup, organization, index rebuild) without manual intervention.
 
 **User stories:**
 
 | ID | Story |
 |---|---|
-| UC3.1 | As an admin, I drop the `file-type-validator` binary into `plugins/`, restart lcloud — the plugin appears in the plugin manager as **running**. |
-| UC3.2 | As a user, I upload a file to a filtered volume — the plugin receives `file.uploaded`, validates it, and a notice appears in the plugin activity feed in the UI. |
+| UC4.1 | As a user, I create a task "Delete images older than 90 days" on my Photos volume, scheduled every Sunday at 2:00 UTC. |
+| UC4.2 | The task runs (scheduled or manually triggered), deletes old files, and the execution appears in task history with the count of deleted files. |
 
-**Out of scope for Phase 1.3:**
+**Out of scope for Phase 1.4:**
 
-- Task scheduler and `task.executed` emission (Phase 1.4)
-- File move/rename API and `file.moved` / `file.renamed` emission
-- Hot-reload of plugins without restart
-- Plugin marketplace / remote registry
-- WASM runtime (IDEAS.md — post-MVP)
-- Plugin file mutations (delete uploaded file on validation failure)
-- Per-volume plugin install wizard (lazy data dir only)
-- Community plugin signing / verification
+- Custom/user-defined macros or scripting language
+- Event-triggered tasks (run on `file.uploaded`, etc.) — schedule-only in MVP
+- Task templates / marketplace
+- Email, webhook, or push notifications for alerts (event bus only; plugins can subscribe)
+- Per-file undo / rollback of macro runs
 - Changes to `.volume.json` schema or volume directory structure
+- Hot-reload of task schedules without restart (gocron updates in-process on CRUD — no restart needed)
+- Kubernetes CronJob / external scheduler
 
 ---
 
@@ -55,15 +57,15 @@ Build the foundational plugin infrastructure so users can extend lcloud with ext
 
 See [docs/project.md — Tech Stack](./docs/project.md#tech-stack).
 
-Phase 1.3 adds:
+Phase 1.4 adds:
 
 | Layer | Addition |
 |---|---|
-| Backend | `github.com/hashicorp/go-plugin` — subprocess RPC (GRPC handshake) |
-| Backend | PostgreSQL models: `Plugin`, `PluginLogEntry` |
-| Example | `examples/file-type-validator/` — reference Go plugin source + manifest |
-| SDK | `pkg/pluginsdk/` — minimal Go helpers for plugin authors |
-| Docs | `docs/plugins/README.md` — how to write a plugin |
+| Backend | `github.com/go-co-op/gocron/v2` — in-process cron + interval scheduler |
+| Backend | PostgreSQL models: `Task`, `TaskRun` |
+| Backend | `internal/task/` — scheduler, macro registry, executor |
+| Backend | `internal/volume/macro_ops.go` — internal move/delete used by macros |
+| Frontend | Tasks page, task form, run history |
 
 ---
 
@@ -72,54 +74,63 @@ Phase 1.3 adds:
 ### Development
 
 ```bash
-# Add go-plugin dependency (during /build)
-go get github.com/hashicorp/go-plugin
+# Add gocron dependency (during /build)
+go get github.com/go-co-op/gocron/v2
 
-# Build example plugin
-go build -o plugins/file-type-validator ./examples/file-type-validator
-
-# Backend tests (plugin module focus)
-go test ./internal/plugin/... -cover
+# Backend tests (task module focus)
+go test ./internal/task/... -cover
+go test ./internal/volume/... -run Macro -cover
 go test ./... -cover
 
 # Frontend tests
 cd web && npm run test
 
-# Local stack (mount plugins dir — see Docker changes below)
+# Local stack
 docker compose up -d --build
 docker compose logs -f app
 ```
 
-### Verification (Phase 1.3 done)
+### Verification (Phase 1.4 done)
 
 ```bash
-# 1. Build and place example plugin
-go build -o plugins/file-type-validator ./examples/file-type-validator
-cp examples/file-type-validator/file-type-validator.json plugins/file-type-validator.json  # manifest sidecar
-
-# 2. Restart stack
-docker compose up -d --build
-
 TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"<ADMIN_EMAIL>","password":"<ADMIN_PASSWORD>"}' \
   | jq -r '.access_token')
 
-# 3. List plugins — file-type-validator running
-curl -s http://localhost:8080/api/plugins \
-  -H "Authorization: Bearer $TOKEN" | jq
+VOL_ID="<photos-volume-uuid>"
 
-# 4. Upload allowed file → plugin activity log entry
-VOL_ID="<volume-uuid>"
-curl -s -X POST "http://localhost:8080/api/volumes/$VOL_ID/files" \
+# 1. Create scheduled cleanup task
+TASK=$(curl -s -X POST http://localhost:8080/api/tasks \
   -H "Authorization: Bearer $TOKEN" \
-  -F "file=@photo.png" | jq
+  -H "Content-Type: application/json" \
+  -d "{
+    \"name\": \"Delete old photos\",
+    \"macro\": \"delete_old_files\",
+    \"scope\": \"volume\",
+    \"volume_id\": \"$VOL_ID\",
+    \"parameters\": {\"days\": 90, \"extensions\": [\".jpg\", \".png\", \".webp\"]},
+    \"schedule_type\": \"cron\",
+    \"schedule\": \"0 2 * * 0\",
+    \"enabled\": true
+  }")
+TASK_ID=$(echo "$TASK" | jq -r '.id')
+echo "$TASK" | jq
 
-curl -s "http://localhost:8080/api/plugins/logs?limit=10" \
+# 2. Manual run (UC4.2)
+curl -s -X POST "http://localhost:8080/api/tasks/$TASK_ID/run" \
   -H "Authorization: Bearer $TOKEN" | jq
 
-# 5. Disable plugin — status stopped, no new log entries on upload
-curl -s -X PATCH "http://localhost:8080/api/plugins/file-type-validator" \
+# 3. Task history shows affected count
+curl -s "http://localhost:8080/api/tasks/$TASK_ID/runs?limit=5" \
+  -H "Authorization: Bearer $TOKEN" | jq
+
+# 4. List tasks — next_run_at populated
+curl -s http://localhost:8080/api/tasks \
+  -H "Authorization: Bearer $TOKEN" | jq
+
+# 5. Disable task
+curl -s -X PATCH "http://localhost:8080/api/tasks/$TASK_ID" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"enabled": false}' | jq
@@ -131,463 +142,574 @@ curl -s -X PATCH "http://localhost:8080/api/plugins/file-type-validator" \
 
 See [docs/project.md — Project structure](./docs/project.md#project-structure).
 
-Phase 1.3 creates or extends:
+Phase 1.4 creates or extends:
 
 ```
 lcloud/
 ├── internal/
-│   └── plugin/
-│       ├── eventbus.go           ← in-process pub/sub, typed events
-│       ├── events.go             ← event types + payloads
-│       ├── publisher.go          ← EventPublisher interface (injected into volume services)
-│       ├── runtime.go            ← go-plugin client, subprocess lifecycle
-│       ├── registry.go           ← scan PLUGINS_PATH, load manifests, validate binaries
-│       ├── host_api.go           ← HostAPI served to plugins (Emit, Log, GetVolumeConfig)
-│       ├── service.go            ← orchestration: registry + runtime + bus + logs
-│       ├── model.go              ← GORM Plugin, PluginLogEntry
-│       ├── rpc.go                ← go-plugin GRPC service definitions
-│       └── service_test.go
-├── pkg/
-│   └── pluginsdk/
-│       ├── plugin.go             ← plugin-side interface + Serve helper
-│       └── events.go             ← shared event type constants
-├── plugins/
-│   ├── .gitkeep
-│   └── file-type-validator/
-│       ├── main.go               ← example plugin entrypoint
-│       ├── validator.go          ← file.uploaded handler
-│       └── file-type-validator.json  ← manifest sidecar (copied next to binary)
-├── docs/
-│   ├── adr/
-│   │   └── NNN-plugin-system.md  ← interface + bus decision (created at /build)
-│   └── plugins/
-│       └── README.md             ← plugin author guide
-├── internal/api/
-│   ├── plugin_handler.go
-│   └── router.go                 ← register plugin routes
-├── internal/volume/
-│   ├── file_service.go           ← inject EventPublisher; emit after upload/delete
-│   └── service.go                ← emit volume.created / volume.deleted / volume.updated
-├── cmd/server/main.go            ← wire plugin service, start registry
+│   ├── task/
+│   │   ├── model.go              ← GORM Task, TaskRun
+│   │   ├── macros.go             ← macro name constants + param schemas
+│   │   ├── registry.go           ← macro name → executor func
+│   │   ├── executor.go             ← MacroExecutor, dispatches by macro type
+│   │   ├── scheduler.go          ← gocron wrapper, load/register jobs
+│   │   ├── service.go            ← CRUD, run-now, history
+│   │   ├── service_test.go
+│   │   ├── executor_test.go
+│   │   └── scheduler_test.go
+│   ├── volume/
+│   │   └── macro_ops.go          ← MoveFileInternal, DeleteFileInternal
+│   ├── plugin/
+│   │   └── events.go             ← FromTaskExecuted, FromTaskFailed, FromVolumeAlertUsage
+│   └── api/
+│       ├── task_handler.go
+│       └── router.go             ← register task routes
+├── cmd/server/main.go            ← wire task service, start scheduler, graceful shutdown
 ├── web/src/
-│   ├── pages/PluginsPage.tsx     ← replace PlaceholderPage
-│   ├── components/plugins/
-│   │   ├── PluginList.tsx
-│   │   ├── PluginStatusBadge.tsx
-│   │   └── PluginActivityFeed.tsx
-│   └── hooks/usePlugins.ts
-├── docker-compose.yml              ← mount plugins volume
-├── .env.example                    ← PLUGINS_PATH
-└── Dockerfile                      ← optional: build example plugin in CI image
+│   ├── pages/TasksPage.tsx       ← replace PlaceholderPage
+│   ├── components/tasks/
+│   │   ├── TaskList.tsx
+│   │   ├── TaskForm.tsx
+│   │   ├── TaskRunHistory.tsx
+│   │   ├── MacroParameterFields.tsx
+│   │   └── ScheduleFields.tsx
+│   └── hooks/useTasks.ts
+├── docs/
+│   └── adr/
+│       └── NNN-task-system.md    ← scheduler + macro vocabulary (created at /build)
+└── SPEC.md                       ← this file
 ```
 
 ---
 
 ## Architecture
 
-### Event flow
+### Execution flow
 
 ```
-FileService.Upload (success)
-    → EventPublisher.Publish(file.uploaded)
-    → EventBus (in-process)
-    → Plugin Runtime (for each enabled plugin subscribed)
-    → go-plugin RPC → plugin subprocess HandleEvent()
-    → plugin may call HostAPI.Log / HostAPI.Emit
-    → PluginLogEntry persisted → UI activity feed
+gocron trigger (cron | interval)
+    → task.Service.executeTask(taskID)
+    → MacroExecutor.Run(ctx, task)
+    → registry[macro](ctx, deps, volume, params)
+    → volume.MacroOps (move/delete) | monitoring.ComputeStats | indexer.Rebuild+reindex
+    → TaskRun persisted (status, affected_count, error)
+    → EventPublisher: task.executed | task.failed | file.moved | volume.alert.usage
+    → Plugin bus (async, existing pattern)
 ```
 
 ### Module boundaries (AGENTS.md)
 
-- Domain modules (`volume`, future `task`) **only** call `EventPublisher.Publish` — never import go-plugin or talk to plugin subprocesses directly.
-- All plugin lifecycle, RPC, and subscription logic lives in `internal/plugin/`.
-- Plugins access volume data **only** through `HostAPI` — no DB, no direct disk writes outside their volume data dir.
+- **`internal/task/`** owns scheduling, macro dispatch, task CRUD, run history.
+- **`internal/volume/`** owns all disk mutations — macros never write to `userdata/` directly from `task/`.
+- **`internal/monitoring/`** — `ComputeStats` called by `compute_stats` macro (existing method).
+- **`internal/indexer/`** — `Rebuild` + `Index` called by `rebuild_index` macro via `VolumeIndexer` interface only.
+- **Event emission** — task service publishes via extended `EventPublisher` or plugin bridge helpers; domain modules do not import `internal/task/`.
+- **No business logic in Gin handlers** — handlers call `task.Service` only.
 
-### go-plugin handshake
+### Concurrency
 
-| Side | Responsibility |
+| Rule | Behavior |
 |---|---|
-| **Host (lcloud)** | Scans `PLUGINS_PATH`, spawns plugin subprocess, implements `HostAPI` GRPC service, dispatches events |
-| **Plugin binary** | Implements `LcloudPlugin` GRPC service, declares subscriptions in manifest, calls `HostAPI` for callbacks |
+| Same task | At most one run in progress; concurrent trigger (schedule + manual) skips if already running |
+| Same volume | Destructive macros (`delete_*`, `move_*`, `sort_*`, `clear_cache`) acquire a per-volume mutex for the whole run — see **OQ2** for collision policy |
+| Non-destructive | `rebuild_index`, `compute_stats`, `alert_usage` may run concurrently with each other and **while** a destructive macro holds the volume lock |
+| Dry-run runs | A dry-run (`dry_run: true`) **does not** acquire the volume mutex — read-only scan; safe to overlap with other dry-runs |
 
-Communication: HashiCorp go-plugin with **GRPC** plugin protocol (default in go-plugin v1.x).
+### Scheduler lifecycle
+
+1. **Startup:** load enabled tasks from PostgreSQL → register gocron jobs → compute `next_run_at`.
+2. **CRUD:** create/update/delete task → unregister old job → register new job (in-process, no restart).
+3. **Shutdown:** `scheduler.Shutdown()` on SIGTERM before plugin stop.
 
 ---
 
 ## Data models
 
-### Plugin manifest (sidecar `{binary-name}.json` next to binary)
-
-Required for discovery. Binary without manifest is skipped with a warning log.
-
-```json
-{
-  "id": "file-type-validator",
-  "name": "File Type Validator",
-  "version": "1.0.0",
-  "description": "Validates uploaded files against volume extension filters",
-  "author": "lcloud",
-  "subscribe": ["file.uploaded"],
-  "emit": ["validation.failed", "validation.passed"]
-}
-```
-
-**Rules:**
-
-- `id` — stable slug, `[a-z0-9-]+`, unique per instance; matches volume data dir name `./plugins/{id}/`.
-- `subscribe` — event names the plugin wants; runtime filters before RPC dispatch.
-- `emit` — declared custom events (documentation; bus accepts any `plugin.*` or namespaced custom events).
-
-### PostgreSQL — `plugins`
+### PostgreSQL — `tasks`
 
 ```go
-type Plugin struct {
-    ID            string    `gorm:"primaryKey"` // manifest id
-    Name          string    `gorm:"not null"`
-    Version       string    `gorm:"not null"`
-    Description   string
-    BinaryPath    string    `gorm:"not null"`
-    ManifestPath  string    `gorm:"not null"`
-    Enabled       bool      `gorm:"not null;default:true"`
-    Status        string    `gorm:"not null;default:stopped"` // running | stopped | error
-    Subscriptions StringArray `gorm:"type:jsonb;not null"` // from manifest
-    LastError     string
-    DiscoveredAt  time.Time
-    UpdatedAt     time.Time
+type Task struct {
+    ID           uuid.UUID      `gorm:"type:uuid;primaryKey"`
+    OwnerID      uuid.UUID      `gorm:"type:uuid;not null;index"`
+    Name         string         `gorm:"not null"`
+    Macro        string         `gorm:"not null;index"` // predefined macro name
+    Scope        string         `gorm:"not null"`       // volume | global
+    VolumeID     *uuid.UUID     `gorm:"type:uuid;index"` // required when scope=volume
+    Parameters   JSON           `gorm:"type:jsonb;not null;default:'{}'"`
+    ScheduleType string         `gorm:"not null"` // cron | interval
+    Schedule     string         `gorm:"not null"` // cron expr or Go duration e.g. "24h"
+    Enabled      bool           `gorm:"not null;default:true"`
+    NextRunAt    *time.Time     `gorm:"index"`
+    LastRunAt    *time.Time
+    CreatedAt    time.Time
+    UpdatedAt    time.Time
 }
 ```
 
-On startup: scan directory → upsert rows → start enabled plugins.
+**Validation rules:**
 
-### PostgreSQL — `plugin_log_entries`
+- `macro` must be in the predefined catalog.
+- `scope=volume` → `volume_id` required; owner must own volume (or admin).
+- `scope=global` → `volume_id` null; **admin-only** create/update; macro must allow global scope.
+- `schedule_type=cron` → validate with standard 5-field cron parser (minute hour dom month dow).
+- `schedule_type=interval` → parse as Go duration (`1h`, `24h`, `168h`); minimum `1m`.
+- `parameters` validated per macro schema before save.
+
+### PostgreSQL — `task_runs`
 
 ```go
-type PluginLogEntry struct {
-    ID        uuid.UUID  `gorm:"type:uuid;primaryKey"`
-    PluginID  string     `gorm:"not null;index"`
-    VolumeID  *uuid.UUID `gorm:"type:uuid;index"`
-    EventType string     // e.g. file.uploaded, validation.passed
-    Level     string     `gorm:"not null"` // info | warn | error
-    Message   string     `gorm:"not null"`
-    Payload   JSON       `gorm:"type:jsonb"` // optional structured detail
-    CreatedAt time.Time  `gorm:"index"`
+type TaskRun struct {
+    ID            uuid.UUID  `gorm:"type:uuid;primaryKey"`
+    TaskID        uuid.UUID  `gorm:"type:uuid;not null;index"`
+    Status        string     `gorm:"not null"` // success | failed | skipped | dry_run
+    AffectedCount int        `gorm:"not null;default:0"`
+    Message       string     // human-readable summary
+    Error         string     // set when status=failed
+    StartedAt     time.Time  `gorm:"not null;index"`
+    FinishedAt    time.Time
+    DurationMs    int64
 }
 ```
 
-Retention: **500 entries max per plugin** (decision OQ1) — delete oldest on insert when count exceeds 500.
+**Retention:** last **200 runs per task** — delete oldest on insert when exceeded (mirrors plugin log policy).
 
 ---
 
-## Event catalog
+## Macro catalog (closed vocabulary)
 
-### Core events (emitted by lcloud in Phase 1.3)
+All macros return `MacroResult{AffectedCount, Message}`.
+
+### Scope matrix
+
+| Macro | Volume | Global (admin) |
+|---|---|---|
+| `delete_old_files` | ✅ | ❌ |
+| `delete_large_files` | ✅ | ❌ |
+| `clear_cache` | ✅ | ❌ |
+| `move_files` | ✅ | ❌ |
+| `sort_by_type` | ✅ | ❌ |
+| `sort_by_date` | ✅ | ❌ |
+| `rebuild_index` | ✅ | ✅ (all volumes) |
+| `compute_stats` | ✅ | ✅ (all volumes) |
+| `alert_usage` | ✅ | ✅ (all volumes) |
+
+Global execution iterates volumes the task owner can access (admin: all volumes; user: own volumes only — global tasks admin-only in MVP so this is admin → all volumes).
+
+### Dry-run mode (MVP)
+
+Destructive macros support an optional **`dry_run`** parameter (boolean, default `false`). When `true`:
+
+| Behavior | Detail |
+|---|---|
+| Disk | **No mutation** — no delete, move, or cache wipe |
+| Events | **No emission** — no `file.deleted`, `file.moved`, `task.executed` side-effects on individual files (task-level `task.executed` still fires with status `dry_run`) |
+| History | Run status = `dry_run`; `affected_count` = number of files **that would** be affected |
+| Message | Human-readable summary, e.g. `"Would delete 12 files older than 90 days"`; optional `preview_paths` (max 20) in run detail API |
+| Mutex | Does **not** take the destructive volume lock |
+
+**Macros supporting `dry_run`:** `delete_old_files`, `delete_large_files`, `clear_cache`, `move_files`, `sort_by_type`, `sort_by_date`.
+
+**Not supported:** `rebuild_index`, `compute_stats`, `alert_usage` (non-destructive or read-only already).
+
+**UI:** checkbox "Simulation only (dry-run)" in task form; "Run simulation" button on Run-now dialog when macro is destructive. Scheduled runs honour the task's saved `dry_run` parameter — a scheduled dry-run task never mutates files.
+
+**One-shot override:** `POST /tasks/:id/run?dry_run=true` runs a simulation even if the saved task has `dry_run: false` (useful for preview before enabling a destructive schedule).
+
+### Cleanup
+
+#### `delete_old_files`
+
+Delete files in `./userdata/` whose **modification date** is older than N days.
+
+| Parameter | Type | Required | Default |
+|---|---|---|---|
+| `days` | int | yes | — |
+| `extensions` | []string | no | all files |
+| `dry_run` | bool | no | `false` |
+
+- Match against `FileMetadataRecord.ModifiedAt` from metadata cache; fallback to `os.Stat` if metadata missing.
+- Uses `DeleteFileInternal` per match (skipped when `dry_run: true`).
+- Does not delete directories.
+
+#### `delete_large_files`
+
+Delete files larger than N megabytes.
+
+| Parameter | Type | Required | Default |
+|---|---|---|---|
+| `min_size_mb` | int | yes | — |
+| `extensions` | []string | no | all files |
+| `dry_run` | bool | no | `false` |
+
+- Compare `SizeBytes >= min_size_mb * 1024 * 1024`.
+
+#### `clear_cache`
+
+Wipe `./cache/thumbnails/` and `./cache/metadata/` for the volume.
+
+| Parameter | Type | Required | Default |
+|---|---|---|---|
+| `dry_run` | bool | no | `false` |
+
+- Remove all files in both dirs; recreate empty dirs (skipped when `dry_run: true`).
+- Invalidate stats cache (`StatsCache.Invalidate`).
+- Does **not** remove `./cache/index/` (Bleve).
+- `AffectedCount` = number of metadata records removed.
+
+### Organization
+
+#### `move_files`
+
+Move files matching a glob pattern to a target subfolder under `./userdata/`.
+
+| Parameter | Type | Required | Default |
+|---|---|---|---|
+| `pattern` | string | yes | — |
+| `target_subfolder` | string | yes | — |
+| `dry_run` | bool | no | `false` |
+
+- Glob matched against relative path from userdata root (e.g. `*.jpg`, `vacation/*.png`).
+- `target_subfolder` sanitized via `PathResolver` (no `..`).
+- Creates target directory if missing.
+- Skips if destination file already exists (count as skipped, not error).
+- Uses `MoveFileInternal`; emits `file.moved` per file.
+
+#### `sort_by_type`
+
+| Parameter | Type | Required | Default |
+|---|---|---|---|
+| `dry_run` | bool | no | `false` |
+
+Auto-sort files into type-based subfolders at userdata root:
+
+| Folder | MIME rule (reuse `monitoring.CategoryForMIME`) |
+|---|---|
+| `images/` | `image/*` |
+| `documents/` | documents category |
+| `videos/` | `video/*` |
+| `audio/` | `audio/*` |
+| `other/` | everything else |
+
+- Only moves files **directly in userdata root** (not recursive into existing subfolders) — avoids reshuffling organized trees.
+- Archives category maps to `other/` (no `archives/` folder in STARTUP list).
+
+#### `sort_by_date`
+
+| Parameter | Type | Required | Default |
+|---|---|---|---|
+| `dry_run` | bool | no | `false` |
+
+Auto-sort files from userdata root into `YYYY/MM/` subfolders based on **modification date**.
+
+- Same non-recursive rule as `sort_by_type`.
+- Example: file modified 2026-03-15 → `2026/03/filename.jpg`.
+
+### Maintenance
+
+#### `rebuild_index`
+
+Force full Bleve reindex.
+
+1. `VolumeIndexer.Rebuild(volumePath)` — clears index files.
+2. Walk metadata cache (`ListAll`) → `Index` each record.
+3. `AffectedCount` = records re-indexed.
+
+#### `compute_stats`
+
+Force recalculation of volume statistics.
+
+- Calls existing `monitoring.Service.ComputeStats(vol)`.
+- `AffectedCount` = file count from computed stats.
+
+### Alerts
+
+#### `alert_usage`
+
+Check if volume usage exceeds threshold; log and emit event when triggered.
+
+| Parameter | Type | Required | Default |
+|---|---|---|---|
+| `threshold_percent` | int | yes | — |
+
+- Usage = `vol.UsedBytes / vol.QuotaBytes * 100` (skip if `QuotaBytes == 0`).
+- When exceeded: emit `volume.alert.usage` with `{usage_percent, quota_bytes, used_bytes}`.
+- `AffectedCount` = 1 when alert fired, 0 otherwise.
+- Does not block or delete files.
+
+---
+
+## Internal volume operations
+
+New file `internal/volume/macro_ops.go` — used **only** by `internal/task/` (same module, unexported helpers or `MacroOps` struct).
+
+```go
+type MacroOps struct {
+    volumes      *Service
+    paths        *PathResolver
+    metadata     *MetadataCache
+    thumbnails   *ThumbnailGenerator
+    indexManager *indexer.IndexManager
+    statsCache   StatsInvalidator
+    events       EventPublisher
+}
+
+// DeleteFileInternal removes a file by relative path without auth claims.
+// Reuses the same steps as FileService.Delete (metadata, thumbnail, index, usage, events).
+func (m *MacroOps) DeleteFileInternal(ctx context.Context, vol *Volume, relPath string) error
+
+// MoveFileInternal moves within userdata; updates metadata path, re-indexes, emits file.moved.
+func (m *MacroOps) MoveFileInternal(ctx context.Context, vol *Volume, fromRel, toRel string) error
+```
+
+**Security:** callers must validate task ownership before invoking. Macro ops trust the task layer.
+
+**Events added to `volume.EventPublisher`:**
+
+```go
+FileMoved(ctx context.Context, event FileMovedEvent)
+// FileMovedEvent: VolumeID, FromPath, ToPath, SizeBytes
+```
+
+Plugin bridge maps to `file.moved` (already defined in `internal/plugin/events.go`).
+
+---
+
+## Event catalog (Phase 1.4 emissions)
 
 | Event | Emitted when | Payload highlights |
 |---|---|---|
-| `file.uploaded` | After successful `FileService.Upload` | `volume_id`, `name`, `relative_path`, `mime_type`, `size_bytes`, `filters` |
-| `file.deleted` | After successful `FileService.Delete` | `volume_id`, `relative_path`, `size_bytes` |
-| `volume.created` | After `VolumeService.Create` | `volume_id`, `name`, `owner_id`, `filters`, `quota_bytes` |
-| `volume.deleted` | After `VolumeService.Delete` | `volume_id`, `name` |
-| `volume.updated` | After `VolumeService.Patch` | `volume_id`, changed fields |
+| `task.executed` | Task run completes with `success` | `task_id`, `macro`, `volume_id`, `affected_count`, `duration_ms` |
+| `task.failed` | Task run completes with `failed` | `task_id`, `macro`, `volume_id`, `error` |
+| `file.moved` | After each successful `MoveFileInternal` | `volume_id`, `from_path`, `to_path`, `size_bytes` |
+| `volume.alert.usage` | `alert_usage` threshold exceeded | `volume_id`, `usage_percent`, `quota_bytes`, `used_bytes` |
 
-### Defined but not emitted until later phases
-
-| Event | Phase |
-|---|---|
-| `file.moved` | When move API / `move_files` macro ships |
-| `file.renamed` | When rename API ships |
-| `task.executed` | Phase 1.4 |
-| `task.failed` | Phase 1.4 |
-| `volume.alert.usage` | Phase 1.4 (`alert_usage` macro) |
-
-### Plugin lifecycle events (emitted by plugin runtime)
-
-| Event | When |
-|---|---|
-| `plugin.registered` | Plugin subprocess started successfully |
-| `plugin.unregistered` | Plugin stopped or crashed |
-
-### Custom events (example plugin)
-
-| Event | When |
-|---|---|
-| `validation.passed` | Extension matches volume filters |
-| `validation.failed` | Extension mismatch (edge case: filter changed after upload, manual file copy) |
-
-Custom events are re-published on the bus so other plugins can subscribe in future.
-
-### Event envelope
-
-```go
-type Event struct {
-    ID        string          `json:"id"`         // uuid
-    Type      string          `json:"type"`
-    Timestamp time.Time       `json:"timestamp"`
-    VolumeID  string          `json:"volume_id,omitempty"`
-    Payload   json.RawMessage `json:"payload"`
-}
-```
+Emit via plugin bridge after `TaskRun` persisted — same async fire-and-forget pattern as file events.
 
 ---
 
-## Plugin RPC interfaces
+## API (Phase 1.4)
 
-### `LcloudPlugin` (implemented by plugin binary)
+Base path: `/api`. All endpoints require JWT.
 
-```go
-type LcloudPlugin interface {
-    // Called by host when a subscribed event occurs.
-    HandleEvent(ctx context.Context, event *Event) (*HandleResult, error)
-}
-
-type HandleResult struct {
-    // Optional custom events to emit onto the bus.
-    Emit []Event `json:"emit,omitempty"`
-}
-```
-
-### `HostAPI` (implemented by lcloud host, called by plugin)
-
-```go
-type HostAPI interface {
-    // Re-emit an event onto the bus (for custom plugin events).
-    Emit(ctx context.Context, event *Event) error
-
-    // Append a log entry visible in the plugin manager UI.
-    Log(ctx context.Context, entry LogRequest) error
-
-    // Read volume config (filters, name, quota) — no file content access.
-    GetVolumeConfig(ctx context.Context, volumeID string) (*VolumeConfigView, error)
-
-    // Resolve path for plugin's isolated data dir; creates dir if missing.
-    PluginDataDir(ctx context.Context, volumeID, pluginID string) (string, error)
-}
-```
-
-**Security rules for HostAPI:**
-
-- `GetVolumeConfig` — owner-scoped volumes only; returns filters/name/quota, not disk paths (masking-friendly).
-- `PluginDataDir` — only `{volume.root}/plugins/{plugin-id}/`; created with `0755`.
-- No raw `userdata/` file read/write in MVP.
-
----
-
-## Example plugin — `file-type-validator`
-
-**Purpose:** Demonstrate end-to-end plugin flow (UC3.1, UC3.2).
-
-**Behavior on `file.uploaded`:**
-
-1. Read `filters` from event payload (also available via `GetVolumeConfig`).
-2. Run same logic as `volume.ValidateExtension(filters, filename)`.
-3. If valid → `HostAPI.Log(info, "validation passed for {filename}")` + emit `validation.passed`.
-4. If invalid → `HostAPI.Log(warn, "validation failed for {filename}")` + emit `validation.failed`.
-5. Does **not** delete the file (audit-only in MVP; deletion would require a future HostAPI).
-
-**Note for UC3.2 demo:** Upload a `.png` to a volume that allows `.png` — plugin logs success. To demo `validation.failed`, change volume filters after upload or copy a disallowed file directly into `userdata/` (manual test only).
-
----
-
-## API (Phase 1.3)
-
-Base path: `/api`. All endpoints require JWT unless noted.
-
-### Plugins
+### Tasks
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `GET` | `/plugins` | JWT | List discovered plugins with status |
-| `GET` | `/plugins/:id` | JWT | Single plugin detail |
-| `PATCH` | `/plugins/:id` | Admin | Enable/disable plugin |
-| `GET` | `/plugins/logs` | JWT | Recent activity feed |
+| `GET` | `/tasks` | JWT | List tasks (scoped to owner; admin sees all) |
+| `POST` | `/tasks` | JWT | Create task |
+| `GET` | `/tasks/:id` | JWT | Task detail + last run summary |
+| `PATCH` | `/tasks/:id` | JWT | Update task (owner or admin) |
+| `DELETE` | `/tasks/:id` | JWT | Delete task + unregister schedule |
+| `POST` | `/tasks/:id/run` | JWT | Trigger immediate run |
+| `GET` | `/tasks/:id/runs` | JWT | Execution history |
 
-#### `GET /plugins`
+Optional query on `GET /tasks`: `volume_id` filter.
 
-**Response:**
+#### `POST /tasks` — request example
 
 ```json
 {
-  "plugins": [
+  "name": "Delete old photos",
+  "macro": "delete_old_files",
+  "scope": "volume",
+  "volume_id": "660e8400-e29b-41d4-a716-446655440001",
+  "parameters": {
+    "days": 90,
+    "extensions": [".jpg", ".png", ".webp"]
+  },
+  "schedule_type": "cron",
+  "schedule": "0 2 * * 0",
+  "enabled": true
+}
+```
+
+#### `GET /tasks` — response shape
+
+```json
+{
+  "tasks": [
     {
-      "id": "file-type-validator",
-      "name": "File Type Validator",
-      "version": "1.0.0",
-      "description": "Validates uploaded files against volume extension filters",
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "name": "Delete old photos",
+      "macro": "delete_old_files",
+      "scope": "volume",
+      "volume_id": "660e8400-e29b-41d4-a716-446655440001",
+      "volume_name": "Photos",
+      "parameters": {"days": 90, "extensions": [".jpg", ".png", ".webp"]},
+      "schedule_type": "cron",
+      "schedule": "0 2 * * 0",
+      "schedule_description": "Every Sunday at 02:00 UTC",
       "enabled": true,
-      "status": "running",
-      "subscriptions": ["file.uploaded"],
-      "last_error": "",
-      "discovered_at": "2026-07-01T10:00:00Z"
+      "next_run_at": "2026-07-06T02:00:00Z",
+      "last_run_at": "2026-06-29T02:00:01Z",
+      "last_run_status": "success",
+      "created_at": "2026-06-01T10:00:00Z"
     }
   ]
 }
 ```
 
-#### `PATCH /plugins/:id`
+#### `GET /tasks/:id/runs`
 
-**Request:**
+| Param | Type | Description |
+|---|---|---|
+| `limit` | int | Max entries (default 20, max 100) |
 
 ```json
-{ "enabled": false }
+{
+  "runs": [
+    {
+      "id": "...",
+      "status": "success",
+      "affected_count": 12,
+      "message": "Deleted 12 files older than 90 days",
+      "error": "",
+      "started_at": "2026-06-29T02:00:01Z",
+      "finished_at": "2026-06-29T02:00:03Z",
+      "duration_ms": 2100
+    }
+  ]
+}
 ```
 
-**Behavior:**
-
-- `enabled: true` → start subprocess if not running; set status `running` or `error`.
-- `enabled: false` → graceful stop subprocess; set status `stopped`.
-
-#### `GET /plugins/logs`
+#### `POST /tasks/:id/run`
 
 **Query parameters:**
 
 | Param | Type | Description |
 |---|---|---|
-| `plugin_id` | string | Filter by plugin (optional) |
-| `volume_id` | uuid | Filter by volume (optional) |
-| `limit` | int | Max entries (default 50, max 200) |
+| `dry_run` | bool | Optional one-shot override — `true` forces simulation even if task params have `dry_run: false` |
 
-**Response:**
+Returns `202 Accepted` with `{ "run_id": "..." }` when execution starts asynchronously.
 
-```json
-{
-  "entries": [
-    {
-      "id": "550e8400-e29b-41d4-a716-446655440000",
-      "plugin_id": "file-type-validator",
-      "volume_id": "660e8400-e29b-41d4-a716-446655440001",
-      "event_type": "validation.passed",
-      "level": "info",
-      "message": "validation passed for photo.png",
-      "created_at": "2026-07-01T14:30:00Z"
-    }
-  ]
-}
-```
-
-**Authorization:**
-
-- Regular users see log entries for volumes they own.
-- Admin sees all entries.
+Poll `GET /tasks/:id/runs` or refresh task detail for result.
 
 **Error codes:**
 
 | Code | Condition |
 |---|---|
-| `PLUGIN_NOT_FOUND` | Unknown plugin id |
-| `PLUGIN_START_FAILED` | Enable true but subprocess failed to start |
-| `FORBIDDEN` | Non-admin PATCH |
+| `TASK_NOT_FOUND` | Unknown task id |
+| `INVALID_MACRO` | Unknown macro name |
+| `INVALID_PARAMETERS` | Params fail schema validation |
+| `INVALID_SCHEDULE` | Bad cron or interval |
+| `VOLUME_REQUIRED` | scope=volume without volume_id |
+| `GLOBAL_ADMIN_ONLY` | Non-admin creates global task |
+| `VOLUME_NOT_FOUND` | volume_id invalid or not accessible |
+| `TASK_ALREADY_RUNNING` | Manual run while execution in progress |
+| `TASK_DISABLED` | Manual run on a disabled task |
+| `VOLUME_TASK_BUSY` | Volume locked by another destructive macro (if OQ2 = fail fast) |
+| `FORBIDDEN` | Accessing another user's task |
 
 ---
 
-## Infrastructure changes
+## Frontend (Phase 1.4)
 
-### Environment
-
-Add to `.env.example`:
-
-```bash
-# Plugin binaries directory (inside container)
-PLUGINS_PATH=/plugins
-```
-
-Default in `config.Load()`: `./plugins` for local dev, `/plugins` when `PLUGINS_PATH` set.
-
-### Docker Compose
-
-```yaml
-app:
-  environment:
-    PLUGINS_PATH: /plugins
-  volumes:
-    - ${PLUGINS_PATH:-./plugins}:/plugins:ro
-```
-
-Mount read-only: lcloud executes but does not modify plugin binaries.
-
-### Startup sequence (`cmd/server/main.go`)
-
-1. Migrate `Plugin`, `PluginLogEntry` models.
-2. Construct `plugin.Service` with config, volume service, event bus.
-3. `registry.ScanAndLoad()` — discover binaries + manifests.
-4. `runtime.StartEnabled()` — spawn go-plugin clients.
-5. Inject `EventPublisher` into `VolumeService` and `FileService`.
-6. On shutdown (SIGTERM): `runtime.StopAll()`.
-
----
-
-## Frontend (Phase 1.3)
-
-Follow [design/DESIGN.md](./design/DESIGN.md): dark cards, status badges (green `running`, muted `stopped`, red `error`), yellow accents sparingly.
+Follow [design/DESIGN.md](./design/DESIGN.md): dark cards, electric yellow primary actions, status badges.
 
 ### Routes
 
 | Path | Access | Content |
 |---|---|---|
-| `/plugins` | Protected | Plugin manager (replaces placeholder) |
+| `/tasks` | Protected | Task manager (replaces placeholder) |
 
-Remove "Soon" badge from Plugins sidebar item when Phase 1.3 ships.
+Remove "Soon" badge from Tasks sidebar item when Phase 1.4 ships.
 
-### `/plugins` — Layout
+### `/tasks` — Layout
 
-**Section 1 — Plugin list (`PluginList`):**
+**Section 1 — Task list (`TaskList`):**
 
-- Table/cards: name, version, status badge, subscribed events, enabled toggle (admin only).
-- Empty state: "No plugins found — drop a binary + manifest into the plugins directory and restart."
+- Table: name, volume (linked), macro label, schedule (human-readable + UTC), enabled toggle, next run, last run status badge.
+- Actions: Run now, Edit, Delete.
+- Empty state: "No tasks yet — create one to automate volume maintenance."
+- Filter by volume (dropdown of user's volumes).
 
-**Section 2 — Activity feed (`PluginActivityFeed`):**
+**Section 2 — Create/Edit dialog (`TaskForm`):**
 
-- Recent log entries from `GET /plugins/logs`.
-- Columns: time, plugin name, volume name (linked), level, message.
-- Auto-refresh every 10s via TanStack Query `refetchInterval`.
+- Fields: name, volume picker (hidden for global macros), macro selector (grouped: Cleanup / Organization / Maintenance / Alerts).
+- Dynamic parameter fields per macro (`MacroParameterFields`).
+- Schedule: radio cron vs interval; cron helper presets ("Every Sunday 2am UTC", "Daily midnight UTC"); interval dropdown (1h, 6h, 24h, 7d).
+- Enabled checkbox (default on).
+
+**Section 3 — Run history (`TaskRunHistory`):**
+
+- Shown inline expanded row or slide-over when selecting a task.
+- Columns: started, duration, status, affected count, message/error.
+- Success → emerald badge; failed → rose; skipped → muted; dry_run → yellow/muted "Simulation".
 
 ### Data fetching
 
-- `usePlugins()` — key `['plugins']`, staleTime 15s.
-- `usePluginLogs(params)` — key `['plugins', 'logs', params]`, refetchInterval 10s.
-- `useTogglePlugin(id)` — mutation PATCH, invalidate plugins query.
+- `useTasks(volumeId?)` — key `['tasks', volumeId]`, staleTime 15s.
+- `useTask(id)` — key `['tasks', id]`.
+- `useTaskRuns(id)` — key `['tasks', id, 'runs']`.
+- `useCreateTask`, `useUpdateTask`, `useDeleteTask`, `useRunTask` — mutations with query invalidation.
+
+### Macro labels (UI copy)
+
+| Macro | Label |
+|---|---|
+| `delete_old_files` | Delete old files |
+| `delete_large_files` | Delete large files |
+| `clear_cache` | Clear cache |
+| `move_files` | Move matching files |
+| `sort_by_type` | Sort by file type |
+| `sort_by_date` | Sort by date |
+| `rebuild_index` | Rebuild search index |
+| `compute_stats` | Recompute statistics |
+| `alert_usage` | Usage alert |
 
 ---
 
 ## Code Style
 
-### Go — EventPublisher injection (volume stays ignorant of plugins)
+### Go — macro registration
 
 ```go
-// internal/plugin/publisher.go
-type EventPublisher interface {
-    Publish(ctx context.Context, event Event)
-}
+// internal/task/registry.go
+type MacroFunc func(ctx context.Context, exec *Executor, vol *volume.Volume, params map[string]any) (MacroResult, error)
 
-// internal/volume/file_service.go — after successful upload
-if s.events != nil {
-    s.events.Publish(ctx, plugin.NewFileUploadedEvent(vol, record))
+func DefaultRegistry() map[string]MacroFunc {
+    return map[string]MacroFunc{
+        "delete_old_files":  execDeleteOldFiles,
+        "delete_large_files": execDeleteLargeFiles,
+        // ...
+    }
 }
 ```
 
-- `Publish` is fire-and-forget (async goroutine per event batch) — upload API latency must not wait on plugin RPC.
-- Plugin RPC failures log to `Plugin.LastError` + `plugin_log_entries`; never fail the originating user operation.
+- Parameter parsing in dedicated `parseDeleteOldFilesParams(params)` functions — validate before side effects.
+- Return partial success: if 3 of 5 deletes fail, status `failed`, `AffectedCount=2`, `Error` summarizes first failure.
 
-### Go — Plugin runtime
+### Go — scheduler registration
 
 ```go
-func (r *Runtime) Dispatch(ctx context.Context, event Event) {
-    for _, p := range r.runningPlugins() {
-        if !p.SubscribesTo(event.Type) {
-            continue
-        }
-        go func(plugin *RunningPlugin) {
-            if _, err := plugin.Client.HandleEvent(ctx, &event); err != nil {
-                r.markError(plugin.ID, err)
-            }
-        }(p)
+func (s *Scheduler) Register(task Task) error {
+    s.mu.Lock()
+    defer s.mu.Unlock()
+    s.unregisterLocked(task.ID)
+    if !task.Enabled {
+        return nil
     }
+    jobFn := func() { s.service.executeTask(context.Background(), task.ID) }
+    switch task.ScheduleType {
+    case "cron":
+        _, err := s.cron.NewJob(gocron.CronJob(task.Schedule, false), gocron.NewTask(jobFn))
+        return err
+    case "interval":
+        d, err := time.ParseDuration(task.Schedule)
+        if err != nil { return err }
+        _, err = s.cron.NewJob(gocron.DurationJob(d), gocron.NewTask(jobFn))
+        return err
+    }
+    return ErrInvalidSchedule
 }
 ```
 
 ### TypeScript
 
-- Status badge maps: `running` → emerald, `stopped` → muted, `error` → rose (design tokens).
-- Admin-only toggle: hide disable control for non-admin users (read-only list).
+- Macro selector drives conditional form fields — no single mega-form with booleans.
+- Cron preset buttons fill the schedule input; advanced users can edit raw cron.
+- Confirm dialog before Run now on destructive macros (when `dry_run` is false).
+- Dry-run checkbox visible only for destructive macros; helper text: "Aucun fichier ne sera modifié — prévisualisation uniquement."
 
 ---
 
@@ -597,24 +719,24 @@ See [docs/project.md — Coverage targets](./docs/project.md#coverage-targets).
 
 | Layer | Focus | Location |
 |---|---|---|
-| Backend unit | Event bus subscribe/dispatch, manifest parsing | `internal/plugin/eventbus_test.go`, `registry_test.go` |
-| Backend unit | EventPublisher async behavior | `internal/plugin/service_test.go` |
-| Backend integration | Mock plugin binary (test helper) handles event | `internal/plugin/runtime_test.go` |
-| Backend integration | Plugin API handlers enable/disable | `internal/api/plugin_handler_test.go` |
-| Backend integration | File upload emits event (mock publisher) | `internal/volume/file_service_test.go` |
-| Example plugin | Validator logic | `examples/file-type-validator/validator_test.go` |
-| Frontend unit | PluginList, PluginStatusBadge, activity feed | `web/src/components/plugins/*.test.tsx` |
+| Backend unit | Parameter validation per macro | `internal/task/macros_test.go` |
+| Backend unit | Cron/interval parsing, next_run computation | `internal/task/scheduler_test.go` |
+| Backend unit | Macro registry dispatches correctly | `internal/task/executor_test.go` |
+| Backend integration | `delete_old_files` on temp volume dir | `internal/task/executor_test.go` |
+| Backend integration | `MoveFileInternal` updates metadata + index | `internal/volume/macro_ops_test.go` |
+| Backend integration | Task API CRUD + authorization | `internal/api/task_handler_test.go` |
+| Backend integration | Manual run creates TaskRun, emits events (mock publisher) | `internal/task/service_test.go` |
+| Frontend unit | TaskList, TaskForm macro switching, ScheduleFields | `web/src/components/tasks/*.test.tsx` |
 
-**Coverage target:** 80% minimum on `internal/plugin/`.
+**Coverage target:** 80% minimum on `internal/task/`.
 
 **Verify before ship:**
 
 ```bash
-go build -o plugins/file-type-validator ./examples/file-type-validator
-go test ./internal/plugin/... -cover
+go test ./internal/task/... -cover
 go test ./...
 cd web && npm run test
-# Manual UC3.1 – UC3.2 via UI + curl script above
+# Manual UC4.1 – UC4.2 via UI + curl script above
 ```
 
 ---
@@ -623,55 +745,59 @@ cd web && npm run test
 
 ### Always
 
-- Domain modules publish events via `EventPublisher` only — never import `internal/plugin/runtime` or go-plugin from `volume/`.
-- Plugin subprocess crash must not crash lcloud core.
-- User-facing operations (upload, delete, volume CRUD) succeed even if all plugins are down.
-- Plugin API surface is minimal and explicit — expand via ADR, not ad-hoc.
-- Write ADR in `docs/adr/` before merge documenting interface + bus design.
-- Follow [design/DESIGN.md](./design/DESIGN.md) for plugin manager UI.
-- Mount `plugins/` read-only in Docker.
+- All disk mutations go through `internal/volume/` — macros in `task/` orchestrate, never `os.Remove` on userdata directly.
+- `rebuild_index` uses `VolumeIndexer` interface only — never import Bleve from `task/`.
+- Task CRUD validates macro name against closed catalog before save.
+- Scheduled runs and manual runs share the same `executeTask` path.
+- Emit `task.executed` / `task.failed` on every completed run.
+- Write ADR in `docs/adr/` before merge.
+- Follow [design/DESIGN.md](./design/DESIGN.md) for Tasks UI.
+- On task delete, unregister gocron job and cancel in-flight run gracefully if possible.
 
 ### Ask first
 
-- Adding plugin HostAPI methods beyond Log / Emit / GetVolumeConfig / PluginDataDir.
-- Hot-reload without restart.
-- Plugin ability to mutate userdata files.
-- New core event types beyond the catalog above.
-- Signing / verification of plugin binaries.
+- Adding macros outside the predefined list.
+- Event-triggered tasks (non-schedule triggers).
+- Macro ability to delete directories or entire volume trees.
+- Changing task history retention policy significantly.
+- Exposing server local timezone for cron.
 
 ### Never
 
-- Direct DB access from plugin subprocess.
-- Direct disk writes outside `{volume}/plugins/{plugin-id}/` from plugins.
-- Call plugin RPC from Gin handlers — handlers call `plugin.Service` for management only.
-- Block file upload on plugin validation failure (core filter handles rejection; plugin is audit).
-- Change `.volume.json` schema for plugin state — plugin instance state lives in PostgreSQL + volume plugin dir.
+- User-defined script/code execution in tasks.
+- Direct Bleve calls from outside `internal/indexer/`.
+- Bypass volume quota checks during macro deletes (usage must stay consistent).
+- Store task definitions in `.volume.json` — PostgreSQL only (volume portability unaffected).
+- Block plugin event delivery on task failure.
+- Change `.volume.json` schema or volume directory structure.
 
 ---
 
 ## Success Criteria
 
-Phase 1.3 is **done** when all of the following pass:
+Phase 1.4 is **done** when all of the following pass — **MVP reached**:
 
-- [ ] **SC3.1** `PLUGINS_PATH` configurable; defaults documented in `.env.example`
-- [ ] **SC3.2** Docker mounts plugins directory; example plugin binary discoverable after restart
-- [ ] **SC3.3** Registry scans binaries + manifest sidecars; invalid entries logged, skipped
-- [ ] **SC3.4** `GET /api/plugins` lists discovered plugins with `running` / `stopped` / `error` status
-- [ ] **SC3.5** Admin `PATCH /api/plugins/:id` enable/disable starts/stops subprocess
-- [ ] **SC3.6** Successful file upload emits `file.uploaded` on the bus (verified via mock + integration test)
-- [ ] **SC3.7** File delete emits `file.deleted`; volume create/delete/patch emit corresponding events
-- [ ] **SC3.8** Enabled plugin subprocess receives subscribed events via go-plugin RPC
-- [ ] **SC3.9** `file-type-validator` logs validation result to `plugin_log_entries`
-- [ ] **SC3.10** `GET /api/plugins/logs` returns entries; scoped to volume owner; admin sees all
-- [ ] **SC3.11** Custom event `validation.passed` / `validation.failed` re-published on bus
-- [ ] **SC3.12** `{volume}/plugins/file-type-validator/` created on first handled event
-- [ ] **SC3.13** Plugin crash marks status `error`, sets `last_error`; core remains healthy
-- [ ] **SC3.14** UI: plugin manager shows plugin list with status (UC3.1)
-- [ ] **SC3.15** UI: activity feed shows notice after upload (UC3.2)
-- [ ] **SC3.16** UI: Plugins sidebar active without "Soon" badge
-- [ ] **SC3.17** `pkg/pluginsdk/` + `docs/plugins/README.md` exist with minimal working example
-- [ ] **SC3.18** ADR documents plugin interface and event bus
-- [ ] **SC3.19** `go test ./...` and `cd web && npm run test` pass
+- [ ] **SC4.1** gocron v2 integrated; enabled tasks loaded and scheduled at startup
+- [ ] **SC4.2** Task CRUD API with owner scoping; admin sees all tasks
+- [ ] **SC4.3** Cron and interval schedule types validated; `next_run_at` exposed in API
+- [ ] **SC4.4** All 9 predefined macros implemented with parameter validation
+- [ ] **SC4.5** `delete_old_files` deletes by age; respects optional extension filter (UC4.1)
+- [ ] **SC4.6** Manual run via `POST /tasks/:id/run` works (UC4.2)
+- [ ] **SC4.6b** Dry-run on destructive macro returns status `dry_run`, correct `affected_count`, zero disk changes
+- [ ] **SC4.6c** `POST /tasks/:id/run?dry_run=true` one-shot override works
+- [ ] **SC4.7** Task history records status, affected count, duration, error message
+- [ ] **SC4.8** Enable/disable toggles gocron registration without server restart
+- [ ] **SC4.9** `move_files`, `sort_by_type`, `sort_by_date` emit `file.moved` per file
+- [ ] **SC4.10** `rebuild_index` rebuilds Bleve from metadata cache
+- [ ] **SC4.11** `compute_stats` refreshes monitoring stats cache
+- [ ] **SC4.12** `clear_cache` wipes thumbnails + metadata only (not Bleve)
+- [ ] **SC4.13** `alert_usage` emits `volume.alert.usage` when threshold exceeded
+- [ ] **SC4.14** `task.executed` and `task.failed` emitted on bus after each run
+- [ ] **SC4.15** UI: create task on a volume with cron schedule (UC4.1)
+- [ ] **SC4.16** UI: run history shows deleted file count after execution (UC4.2)
+- [ ] **SC4.17** UI: Tasks sidebar active without "Soon" badge
+- [ ] **SC4.18** ADR documents task system and macro vocabulary
+- [ ] **SC4.19** `go test ./...` and `cd web && npm run test` pass
 
 ---
 
@@ -679,20 +805,18 @@ Phase 1.3 is **done** when all of the following pass:
 
 Suggested vertical slices — `/plan` will expand into `tasks/plan.md`:
 
-1. **ADR draft** — plugin interface, event bus, go-plugin GRPC choice
-2. **Event types + EventBus** — in-process pub/sub, tests
-3. **EventPublisher interface** — inject into volume/file services; emit core events
-4. **PostgreSQL models** — Plugin, PluginLogEntry; migrate in main
-5. **Plugin manifest parser + registry** — scan PLUGINS_PATH
-6. **HostAPI implementation** — Log, Emit, GetVolumeConfig, PluginDataDir
-7. **go-plugin runtime** — spawn, dispatch, stop, error handling
-8. **Plugin service orchestration** — startup/shutdown wiring in main.go
-9. **Plugin API handlers** — list, patch, logs
-10. **pluginsdk package** — Serve helper + shared types
-11. **file-type-validator example** — build target + manifest
-12. **Frontend PluginsPage** — list, toggle, activity feed
-13. **Docker + config** — PLUGINS_PATH, volume mount
-14. **Integration** — Docker end-to-end UC3.1–UC3.2
+1. **ADR draft** — task model, gocron choice, macro vocabulary contract
+2. **PostgreSQL models** — Task, TaskRun; migrate in main
+3. **Macro parameter schemas + validation**
+4. **volume.MacroOps** — DeleteFileInternal, MoveFileInternal + tests
+5. **EventPublisher extension** — FileMoved, task events in plugin bridge
+6. **Macro executor + registry** — implement all 9 macros
+7. **Task service** — CRUD, executeTask, history, concurrency locks
+8. **gocron scheduler** — register/unregister, startup/shutdown wiring
+9. **Task API handlers** — routes in router
+10. **main.go wiring** — task service deps, scheduler start
+11. **Frontend TasksPage** — list, form, history, run now
+12. **Integration** — Docker end-to-end UC4.1–UC4.2
 
 ---
 
@@ -700,17 +824,20 @@ Suggested vertical slices — `/plan` will expand into `tasks/plan.md`:
 
 | # | Decision | Status |
 |---|---|---|
-| D1 | go-plugin with GRPC handshake | ✅ Proposed |
-| D2 | Manifest sidecar JSON next to binary | ✅ Proposed |
-| D3 | Plugin logs in PostgreSQL for UI feed | ✅ Proposed |
-| D4 | Async event dispatch — user ops never wait on plugins | ✅ Proposed |
-| D5 | Core upload filter unchanged; plugin is post-upload audit | ✅ Proposed |
-| D6 | Lazy creation of `{volume}/plugins/{id}/` on first event | ✅ Proposed |
-| D7 | Restart required for new binaries (no hot-reload) | ✅ Proposed — matches UC3.1 |
-| D8 | `file.moved` / `task.executed` defined, emission deferred | ✅ Proposed |
-| D9 | Log retention: 500 entries max per plugin, purge on insert | ✅ Resolved (OQ1) |
-| D10 | Example plugin not bundled in Docker image | ✅ Resolved (OQ2) |
-| D11 | UC3.2 demo: success-only in UI; failed case documented manually | ✅ Resolved (OQ3) |
+| D1 | gocron v2 in-process scheduler | ✅ Proposed |
+| D2 | Task definitions in PostgreSQL only | ✅ Proposed |
+| D3 | Cron in UTC | ✅ Proposed |
+| D4 | Internal MacroOps in volume package for disk mutations | ✅ Proposed |
+| D5 | `rebuild_index` sources files from metadata cache | ✅ Proposed |
+| D6 | `clear_cache` excludes Bleve index | ✅ Proposed |
+| D7 | Sort macros only move files at userdata root (non-recursive) | ✅ Proposed |
+| D8 | Global scope admin-only; limited macros | ✅ Proposed |
+| D9 | Manual run in MVP (async 202) | ✅ Proposed |
+| D10 | Task run retention: 200 per task | ✅ Proposed |
+| D11 | `file.moved` first emitted by Phase 1.4 move macros | ✅ Proposed |
+| D12 | Dry-run mode on destructive macros in MVP | ✅ Resolved (OQ1 — operator choice) |
+| D13 | Volume busy: fail fast (OQ2) | ✅ Resolved |
+| D14 | Minimum schedule interval: 1 minute (OQ3) | ✅ Resolved |
 
 ---
 
@@ -718,24 +845,100 @@ Suggested vertical slices — `/plan` will expand into `tasks/plan.md`:
 
 | # | Question | Status |
 |---|---|---|
-| OQ1 | **Plugin log retention** | ✅ Resolved — Option A: 500 entries per plugin, purge on insert |
-| OQ2 | **Build example plugin in Docker image** | ✅ Resolved — Option A: not bundled; user builds/copies manually |
-| OQ3 | **validation.failed demo path** | ✅ Resolved — Option A: success-only in UI; edge case in docs |
+| OQ1 | **Destructive macro dry-run mode** | ✅ Resolved — included in MVP |
+| OQ2 | **Volume busy policy** | ✅ Resolved — fail fast (`VOLUME_TASK_BUSY`, status `skipped`) |
+| OQ3 | **Minimum interval for scheduled tasks** | ✅ Resolved — 1 minute minimum |
 
-### OQ1 — Plugin log retention (plain language)
+### OQ1 — Dry-run mode ✅ Resolved
 
-**Decision:** Option A — last **500 entries per plugin**. Old entries deleted on insert when limit exceeded. Query always uses `limit`.
+**Decision:** Dry-run **included in MVP** (operator request).
 
-### OQ2 — Example plugin in Docker image (plain language)
+Destructive macros accept `dry_run: true`. See [Dry-run mode (MVP)](#dry-run-mode-mvp) for full behavior.
 
-**Decision:** Option A — **not bundled**. `plugins/` stays git-ignored and user-managed. Build command documented in `docs/plugins/README.md`.
+---
 
-### OQ3 — validation.failed demo (plain language)
+### OQ2 — Volume busy policy
 
-**Decision:** Option A — **success-only in UI**. UC3.2 shows "validation passed" after allowed upload. Manual edge-case test (filter change / direct file copy) documented in `docs/plugins/README.md`.
+**Contexte — pourquoi cette question existe**
+
+Une macro destructive (suppression, déplacement, vidage cache) lit et modifie des fichiers pendant plusieurs secondes ou minutes. Si deux macros de ce type s'exécutent **en même temps sur le même volume**, elles peuvent se marcher dessus : double suppression, déplacement vers un chemin déjà pris, compteur d'espace disque incohérent.
+
+lcloud pose donc un **verrou par volume** pendant toute la durée d'une exécution destructive réelle (`dry_run: false`). La question est : que fait-on quand une deuxième tâche destructive arrive alors que le verrou est déjà pris ?
+
+**Ce qui ne change pas (quel que soit le choix)**
+
+| Situation | Comportement |
+|---|---|
+| Deux tâches sur **des volumes différents** | Aucun conflit — exécution en parallèle |
+| Tâche destructive + tâche non destructive (`compute_stats`, etc.) sur le **même** volume | Pas de blocage — les macros maintenance/alerte peuvent tourner en parallèle |
+| Deux dry-runs sur le même volume | Pas de verrou — lectures seulement |
+| Même tâche déclenchée deux fois (cron + clic « Exécuter ») | La deuxième est ignorée — statut `skipped`, message « already running » |
+
+**Scénarios concrets à trancher**
+
+| Scénario | Option A — Échec immédiat | Option B — File d'attente |
+|---|---|---|
+| Dimanche 2h00 : tâche planifiée « supprimer vieux fichiers » démarre. À 2h01 tu cliques « Exécuter maintenant » sur une autre tâche « tri par date » sur le **même** volume | La 2e run se termine tout de suite avec statut `skipped` et message « volume occupé ». Tu relances manuellement plus tard. | La 2e run **attend** que la 1re finisse, puis s'exécute automatiquement (peut démarrer à 2h05 si la 1re a duré 4 min). |
+| Deux tâches planifiées au **même** créneau cron sur le même volume | La 2e est `skipped` ; visible dans l'historique avec horodatage. | La 2e démarre dès que la 1re libère le verrou — ordre d'arrivée respecté. |
+| Tâche longue (tri de 10 000 fichiers) + 3e déclenchement pendant l'attente (option B) | N/A | Risque de **chaîne d'attente** : la 3e attend la 2e qui attend la 1re ; une run peut démarrer très tard. |
+
+**Impact utilisateur**
+
+| | Option A — Échec immédiat | Option B — File d'attente |
+|---|---|---|
+| Prévisibilité | ✅ Tu sais tout de suite que ça n'a pas tourné | ⚠️ Tu peux croire que rien ne se passe alors qu'une run est en attente |
+| Simplicité technique | ✅ Pas de goroutine bloquée, pas de timeout à gérer | ⚠️ Faut définir un timeout max d'attente (ex. 30 min) sinon run fantôme |
+| Cas d'usage homelab | Rare d'avoir 2 tâches destructives qui se chevauchent | Utile si tu empiles plusieurs automatisations sur un gros volume |
+
+**Recommandation :** Option A — échec immédiat (`VOLUME_TASK_BUSY`, statut `skipped`). Les chevauchements sont rares en homelab ; un échec explicite dans l'historique est plus clair qu'une exécution retardée de plusieurs minutes.
+
+---
+
+### OQ3 — Intervalle minimum entre exécutions planifiées
+
+**Contexte — pourquoi cette question existe**
+
+En plus du cron (ex. « tous les dimanches à 2h »), lcloud accepte des tâches en **intervalle fixe** (ex. « toutes les 24h »). gocron peut théoriquement aller jusqu'à **1 seconde**. Sur du matériel self-hosted (NAS, Raspberry Pi, VPS modeste), un intervalle trop court peut :
+
+- solliciter le disque en continu (`compute_stats`, `rebuild_index`) ;
+- rallonger les uploads pendant qu'une macro tourne ;
+- consommer CPU/RAM si plusieurs volumes ont chacun une tâche fréquente.
+
+Cette question ne concerne **que** `schedule_type: interval`. Le cron a sa propre granularité (minimum **1 minute** entre deux déclenchements si l'expression le permet — ex. `*/1 * * * *`).
+
+**Macros les plus sensibles à un intervalle court**
+
+| Macro | Charge si intervalle agressif |
+|---|---|
+| `rebuild_index` | 🔴 Élevée — parcourt tout le metadata cache + réécrit Bleve |
+| `compute_stats` | 🟠 Moyenne — lit tous les metadata |
+| `delete_old_files` / `sort_*` | 🟠 Variable — dépend du nombre de fichiers |
+| `alert_usage` | 🟢 Faible — une lecture de quota |
+
+**Options**
+
+| Option | Minimum autorisé | Conséquence |
+|---|---|---|
+| **A — 1 minute** | `schedule: "1m"` | Tu peux rafraîchir les stats quasi en temps réel ; doc avertit sur la charge disque |
+| **B — 15 minutes** | `schedule: "15m"` | Limite les abus accidentels (« j'ai mis 1m au lieu de 1h ») ; stats moins fraîches |
+| **C — 1 heure** | `schedule: "1h"` | Très conservateur ; alertes usage et stats au plus hourly |
+
+**Presets UI proposés (indépendamment du minimum)**
+
+| Preset | Valeur | Usage typique |
+|---|---|---|
+| Hourly | `1h` | `alert_usage`, `compute_stats` |
+| Daily | `24h` | maintenance légère |
+| Weekly | `168h` | nettoyage |
+
+Le minimum s'applique si l'utilisateur saisit un intervalle custom (ex. `5m` refusé si minimum = 15m → erreur `INVALID_SCHEDULE` avec message explicite).
+
+**Recommandation :** Option A — **1 minute**. Cible homelab expérimentée ; l'avertissement dans l'UI suffit. Cron et intervalle partagent la même granularité minimale (1 min) pour rester cohérent.
 
 ---
 
 ## Next step
 
 After spec approval → `/plan` to produce `tasks/plan.md` with ordered, verifiable tasks.
+
+**Note:** Phase 1.4 completes the MVP defined in STARTUP.md. After ship, confirm deletion of STARTUP.md before starting post-MVP feature work.

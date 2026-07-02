@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -39,28 +40,35 @@ func TestEventBusPublishAsyncDoesNotBlock(t *testing.T) {
 
 func TestEventBusDispatchesMatchingHandlers(t *testing.T) {
 	bus := NewEventBus()
-	var count int
+	var count atomic.Int32
 	bus.Subscribe(EventFileUploaded, func(ctx context.Context, event Event) {
-		count++
+		count.Add(1)
 	})
 	bus.Subscribe(EventFileDeleted, func(ctx context.Context, event Event) {
-		count += 10
+		count.Add(10)
 	})
 
 	bus.Publish(context.Background(), Event{Type: EventFileUploaded})
-	require.Eventually(t, func() bool { return count == 1 }, time.Second, 10*time.Millisecond)
+	require.Eventually(t, func() bool { return count.Load() == 1 }, time.Second, 10*time.Millisecond)
 }
 
 func TestEventBridgeImplementsVolumePublisher(t *testing.T) {
 	bus := NewEventBus()
 	bridge := NewEventBridge(bus)
 	var received Event
+	var receivedMu sync.Mutex
 	bus.Subscribe(EventFileUploaded, func(ctx context.Context, event Event) {
+		receivedMu.Lock()
 		received = event
+		receivedMu.Unlock()
 	})
 
 	bridge.FileUploaded(context.Background(), volumeFileUploadedFixture())
-	require.Eventually(t, func() bool { return received.Type == EventFileUploaded }, time.Second, 10*time.Millisecond)
+	require.Eventually(t, func() bool {
+		receivedMu.Lock()
+		defer receivedMu.Unlock()
+		return received.Type == EventFileUploaded
+	}, time.Second, 10*time.Millisecond)
 }
 
 func volumeFileUploadedFixture() volume.FileUploadedEvent {

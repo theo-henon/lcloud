@@ -6,9 +6,10 @@ import { DashboardPage } from "@/pages/DashboardPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { MonitoringPage } from "@/pages/MonitoringPage";
+import { PlaceholderPage } from "@/pages/PlaceholderPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { PluginsPage } from "@/pages/PluginsPage";
-import { PlaceholderPage } from "@/pages/PlaceholderPage";
+import { TasksPage } from "@/pages/TasksPage";
 import { VolumeDetailPage } from "@/pages/VolumeDetailPage";
 import { VolumesPage } from "@/pages/VolumesPage";
 import { useAuthStore } from "@/store/auth";
@@ -32,16 +33,7 @@ function AppRoutes() {
           <Route path="/volumes/:id" element={<VolumeDetailPage />} />
           <Route path="/monitoring" element={<MonitoringPage />} />
           <Route path="/plugins" element={<PluginsPage />} />
-          <Route
-            path="/tasks"
-            element={
-              <PlaceholderPage
-                title="Tasks"
-                phase="Phase 1.4"
-                description="Schedule recurring file operations on your volumes."
-              />
-            }
-          />
+          <Route path="/tasks" element={<TasksPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route element={<AdminRoute />}>
             <Route

@@ -73,6 +73,14 @@ func (s *Service) GetByID(id uuid.UUID) (*Volume, error) {
 	return s.findVolume(id)
 }
 
+func (s *Service) ListAll() ([]Volume, error) {
+	var volumes []Volume
+	if err := s.db.Order("created_at asc").Find(&volumes).Error; err != nil {
+		return nil, err
+	}
+	return volumes, nil
+}
+
 func (s *Service) Create(claims *auth.Claims, input CreateVolumeInput) (*Volume, error) {
 	if !s.disks.IsRegistered(input.DiskPath) {
 		return nil, ErrDiskNotFound

@@ -32,7 +32,7 @@ const navGroups: NavGroup[] = [
     title: "Extend",
     items: [
       { label: "Plugins", to: "/plugins" },
-      { label: "Tasks", to: "/tasks", soon: true },
+      { label: "Tasks", to: "/tasks" },
     ],
   },
   {
