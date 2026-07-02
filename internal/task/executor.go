@@ -77,6 +77,9 @@ func (e *Executor) runGlobal(ctx context.Context, macro string, fn MacroFunc, pa
 	totalAffected := 0
 	messages := make([]string, 0, len(volumes))
 	for i := range volumes {
+		if err := ctx.Err(); err != nil {
+			return MacroResult{AffectedCount: totalAffected}, err
+		}
 		vc := volumeContextFrom(&volumes[i])
 		result, err := fn(ctx, e, vc, params)
 		if err != nil {
@@ -139,6 +142,9 @@ func execDeleteOldFiles(ctx context.Context, exec *Executor, vc *VolumeContext, 
 	affected := 0
 	preview := make([]string, 0, 20)
 	for _, record := range records {
+		if err := ctx.Err(); err != nil {
+			return MacroResult{AffectedCount: affected}, err
+		}
 		modified := record.ModifiedAt
 		if modified.IsZero() {
 			if abs, err := exec.macroOps.Paths().ResolveUserdata(vol.RootPath, record.RelativePath); err == nil {
@@ -194,6 +200,9 @@ func execDeleteLargeFiles(ctx context.Context, exec *Executor, vc *VolumeContext
 	affected := 0
 	preview := make([]string, 0, 20)
 	for _, record := range records {
+		if err := ctx.Err(); err != nil {
+			return MacroResult{AffectedCount: affected}, err
+		}
 		size := record.SizeBytes
 		if size == 0 {
 			if abs, err := exec.macroOps.Paths().ResolveUserdata(vol.RootPath, record.RelativePath); err == nil {
@@ -232,7 +241,6 @@ func execDeleteLargeFiles(ctx context.Context, exec *Executor, vc *VolumeContext
 }
 
 func execClearCache(ctx context.Context, exec *Executor, vc *VolumeContext, params Parameters) (MacroResult, error) {
-	_ = ctx
 	dryRun := IsDryRun(params)
 	vol, err := exec.volumeByContext(vc)
 	if err != nil {
@@ -244,6 +252,9 @@ func execClearCache(ctx context.Context, exec *Executor, vc *VolumeContext, para
 
 	count := 0
 	for _, dir := range []string{metaDir, thumbDir} {
+		if err := ctx.Err(); err != nil {
+			return MacroResult{AffectedCount: count}, err
+		}
 		entries, err := os.ReadDir(dir)
 		if err != nil {
 			if os.IsNotExist(err) {
@@ -252,6 +263,9 @@ func execClearCache(ctx context.Context, exec *Executor, vc *VolumeContext, para
 			return MacroResult{}, err
 		}
 		for _, entry := range entries {
+			if err := ctx.Err(); err != nil {
+				return MacroResult{AffectedCount: count}, err
+			}
 			if entry.IsDir() {
 				continue
 			}
@@ -294,6 +308,9 @@ func execMoveFiles(ctx context.Context, exec *Executor, vc *VolumeContext, param
 	affected := 0
 	preview := make([]string, 0, 20)
 	for _, record := range records {
+		if err := ctx.Err(); err != nil {
+			return MacroResult{AffectedCount: affected}, err
+		}
 		matched, err := filepath.Match(pattern, record.RelativePath)
 		if err != nil || !matched {
 			matched, _ = filepath.Match(pattern, record.Name)
@@ -340,6 +357,9 @@ func execSortByType(ctx context.Context, exec *Executor, vc *VolumeContext, para
 	affected := 0
 	preview := make([]string, 0, 20)
 	for _, record := range rootFiles {
+		if err := ctx.Err(); err != nil {
+			return MacroResult{AffectedCount: affected}, err
+		}
 		category := monitoring.CategoryForMIME(record.MimeType)
 		folder := sortFolderForCategory(category)
 		dest := filepath.ToSlash(filepath.Join(folder, record.Name))
@@ -381,6 +401,9 @@ func execSortByDate(ctx context.Context, exec *Executor, vc *VolumeContext, para
 	affected := 0
 	preview := make([]string, 0, 20)
 	for _, record := range rootFiles {
+		if err := ctx.Err(); err != nil {
+			return MacroResult{AffectedCount: affected}, err
+		}
 		modified := record.ModifiedAt
 		if modified.IsZero() {
 			modified = time.Now().UTC()
@@ -411,7 +434,6 @@ func execSortByDate(ctx context.Context, exec *Executor, vc *VolumeContext, para
 }
 
 func execRebuildIndex(ctx context.Context, exec *Executor, vc *VolumeContext, params Parameters) (MacroResult, error) {
-	_ = ctx
 	_ = params
 	vol, err := exec.volumeByContext(vc)
 	if err != nil {
@@ -431,6 +453,9 @@ func execRebuildIndex(ctx context.Context, exec *Executor, vc *VolumeContext, pa
 		return MacroResult{}, err
 	}
 	for _, record := range records {
+		if err := ctx.Err(); err != nil {
+			return MacroResult{AffectedCount: 0}, err
+		}
 		if err := idx.Index(indexer.FileMetadata{
 			ID:           record.ID,
 			Name:         record.Name,

@@ -106,6 +106,7 @@ func (s *Service) Create(ctx context.Context, claims *auth.Claims, input CreateT
 	}
 	if s.scheduler != nil {
 		if err := s.scheduler.Register(ctx, task); err != nil {
+			_ = s.db.Delete(&Task{}, "id = ?", task.ID).Error
 			return nil, err
 		}
 	}
@@ -157,6 +158,9 @@ func (s *Service) Patch(ctx context.Context, claims *auth.Claims, id uuid.UUID, 
 		return nil, err
 	}
 
+	previous := *task
+	previous.Parameters = cloneParams(task.Parameters)
+
 	if input.Name != nil {
 		task.Name = *input.Name
 	}
@@ -198,6 +202,10 @@ func (s *Service) Patch(ctx context.Context, claims *auth.Claims, id uuid.UUID, 
 	}
 	if s.scheduler != nil {
 		if err := s.scheduler.Register(ctx, *task); err != nil {
+			if saveErr := s.db.Save(&previous).Error; saveErr != nil {
+				return nil, fmt.Errorf("scheduler register failed: %w; rollback failed: %v", err, saveErr)
+			}
+			_ = s.scheduler.Register(ctx, previous)
 			return nil, err
 		}
 	}
@@ -212,6 +220,7 @@ func (s *Service) Delete(ctx context.Context, claims *auth.Claims, id uuid.UUID)
 	if err := s.authorizeTask(claims, task); err != nil {
 		return err
 	}
+	s.locks.CancelRun(id)
 	if s.scheduler != nil {
 		s.scheduler.Unregister(id)
 	}
@@ -228,7 +237,7 @@ func (s *Service) RunNow(ctx context.Context, claims *auth.Claims, id uuid.UUID,
 	}
 
 	runID := uuid.New()
-	go s.executeTaskWithRunID(context.Background(), *task, dryRunOverride, runID)
+	go s.executeTaskWithRunID(context.Background(), id, dryRunOverride, runID)
 	return runID, nil
 }
 
@@ -255,19 +264,27 @@ func (s *Service) ListRuns(claims *auth.Claims, taskID uuid.UUID, limit int) ([]
 }
 
 func (s *Service) executeTask(ctx context.Context, taskID uuid.UUID, dryRunOverride bool) {
+	s.executeTaskWithRunID(ctx, taskID, dryRunOverride, uuid.New())
+}
+
+func (s *Service) executeTaskWithRunID(ctx context.Context, taskID uuid.UUID, dryRunOverride bool, runID uuid.UUID) {
+	if !s.locks.TryAcquireTask(taskID) {
+		s.recordSkippedRun(taskID, runID, "task already running")
+		return
+	}
+	defer s.locks.ReleaseTask(taskID)
+
 	task, err := s.findTask(taskID)
 	if err != nil || !task.Enabled {
 		return
 	}
-	s.executeTaskWithRunID(ctx, *task, dryRunOverride, uuid.New())
-}
 
-func (s *Service) executeTaskWithRunID(ctx context.Context, task Task, dryRunOverride bool, runID uuid.UUID) {
-	if !s.locks.TryAcquireTask(task.ID) {
-		s.recordSkippedRun(task.ID, runID, "task already running")
-		return
-	}
-	defer s.locks.ReleaseTask(task.ID)
+	runCtx, cancel := context.WithCancel(ctx)
+	s.locks.RegisterRunCancel(taskID, cancel)
+	defer func() {
+		cancel()
+		s.locks.UnregisterRunCancel(taskID)
+	}()
 
 	params := task.Parameters
 	if params == nil {
@@ -296,13 +313,18 @@ func (s *Service) executeTaskWithRunID(ctx context.Context, task Task, dryRunOve
 		StartedAt: started,
 	}
 
-	result, err := s.executor.Run(ctx, &task, dryRun)
+	result, err := s.executor.Run(runCtx, task, dryRun)
 	if err != nil {
-		run.Status = RunStatusFailed
-		run.Error = err.Error()
-		run.Message = "Task execution failed"
-		s.finishRun(&task, &run, started)
-		s.emitTaskFailed(task, err.Error())
+		if errors.Is(err, context.Canceled) {
+			run.Status = RunStatusSkipped
+			run.Message = "task cancelled"
+		} else {
+			run.Status = RunStatusFailed
+			run.Error = err.Error()
+			run.Message = "Task execution failed"
+			s.emitTaskFailed(*task, err.Error())
+		}
+		s.finishRun(task, &run, started)
 		return
 	}
 
@@ -311,8 +333,8 @@ func (s *Service) executeTaskWithRunID(ctx context.Context, task Task, dryRunOve
 	if dryRun {
 		run.Status = RunStatusDryRun
 	}
-	s.finishRun(&task, &run, started)
-	s.emitTaskExecuted(task, result.AffectedCount, run.DurationMs, dryRun)
+	s.finishRun(task, &run, started)
+	s.emitTaskExecuted(*task, result.AffectedCount, run.DurationMs, dryRun)
 }
 
 func (s *Service) finishRun(task *Task, run *TaskRun, started time.Time) {
