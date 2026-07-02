@@ -199,6 +199,41 @@ Strategic shifts (new audience, new deployment model) → **VISION.md**, not IDE
 
 ---
 
+### Volume file explorer UX redesign
+**Context:** MVP ships a functional but minimal file browser on `/volumes/:id` — flat table (`FileBrowser`), breadcrumb only, a permanent drag-and-drop upload banner above the list, and an always-visible "New folder" text field + button. Operator feedback (post-MVP): the layout does not resemble any familiar product; upload and folder creation **pollute** the main area instead of living in standard controls; files cannot be dropped **onto** the file list itself. Navigation is click-folder-name-in-table only — no sidebar tree, view switcher, or inline rename. FTP/WebDAV are separate ideas; the web UI should feel like a known cloud drive on day one.
+**Value:** Reuse interaction patterns from **OneDrive, Google Drive, Dropbox**, plus desktop habits (Windows Explorer inline rename): users already know where upload, "New folder", views, and rename live — no learning curve for a custom lcloud layout.
+**Estimated effort:** Medium to Heavy
+**Dependencies:** Phase 1.1 volumes + file API (shipped); **rename/move API** not exposed to web yet (`MoveFileInternal` exists for macros only); `design/DESIGN.md` for UI pass
+**Date:** 2026-07-02
+
+**Operator pain points to fix:**
+- Remove the permanent upload zone — **drop files directly on the file list / folder area** (visual feedback on drag-over)
+- Remove the always-visible folder name text box — **"New" / "+" control** opens create-folder flow (inline or small dialog)
+- Overall layout = **standard cloud file manager**, not admin table + forms stack
+
+**Operator decisions (direction for `/spec`):**
+- **Sidebar folder tree** — yes; lazy-loaded tree on the left, contents on the right (Drive / Explorer hybrid)
+- **Multiple views** — switchable **list** and **grid** (thumbnails); view preference remembered in the browser
+- **Flexible list view** — user can show/hide columns, **resize** column widths, **reorder** columns; **launch columns:** name (required), **size**, **modified date** — type and others optional via column picker
+- **Layout prefs** — **localStorage first** (view mode, column set, order, widths); note for later: evaluate whether **server-side persistence** per user is worth it once the UI is in daily use
+- **Inline rename** — Windows Explorer style: F2, right-click → Rename, or slow double-click on name; label becomes editable in place; files and folders
+- **Drag-and-drop move** — drag file(s) onto a folder in the tree or list to move them (same mental model as desktop/cloud drives); distinct from upload drop (external files → volume)
+
+**Possible scope (post-MVP `/spec`):**
+- **Layout:** left folder tree + top toolbar (New, Upload, view toggle, column picker) + main contents pane
+- **Upload:** drop external files onto contents pane; optional Upload button in toolbar
+- **Move:** drag internal items onto folder targets (tree node or folder row); visual highlight on valid drop target
+- **Navigation:** tree selection + breadcrumb/path bar, double-click folder to open
+- **Views:** list (customizable columns) + grid (icons/thumbnails)
+- **Actions:** context menu (download, delete, rename); inline rename as above
+- **Backend:** expose rename + move for web UI (wrap `MoveFileInternal` / volume layer); emit `file.moved` / `file.renamed` on event bus
+- **Out of scope for v1:** FTP/WebDAV UI, sync/conflict UI, in-browser editor, server-side layout prefs (deferred — test need after v1)
+
+**Follow-up to validate post-ship:**
+- Is server-side storage of view/column preferences useful (multi-device, shared admin workstation)?
+
+---
+
 ### Webhook notifications macro
 **Context:** Post-MVP macro — send an HTTP POST to an external URL on a condition (e.g. volume > 90% full).
 **Value:** Integration with external systems (Slack, Discord, custom automation webhooks).
