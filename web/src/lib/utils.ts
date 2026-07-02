@@ -15,6 +15,13 @@ export function formatBytes(bytes: number): string {
   return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
 }
 
+export function formatSpeed(bytesPerSecond: number): string {
+  if (!Number.isFinite(bytesPerSecond) || bytesPerSecond <= 0) {
+    return "—";
+  }
+  return `${formatBytes(bytesPerSecond)}/s`;
+}
+
 export function parseQuotaGB(input: string): number {
   const trimmed = input.trim();
   if (!trimmed) {

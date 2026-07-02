@@ -8,6 +8,10 @@ export type UploadQueueItem = {
   targetPath: string;
   state: "queued" | "uploading" | "done" | "error";
   error?: string;
+  progress?: number;
+  bytesUploaded?: number;
+  bytesTotal?: number;
+  speedBytesPerSec?: number;
 };
 
 const MAX_PARALLEL = 3;
@@ -29,15 +33,38 @@ export function useUploadQueue(volumeId: string, onComplete?: () => void) {
   const uploadOne = useCallback(
     async (item: UploadQueueItem) => {
       activeCount.current += 1;
-      setItemState(item.id, { state: "uploading" });
+      const startedAt = Date.now();
+      setItemState(item.id, {
+        state: "uploading",
+        progress: 0,
+        bytesUploaded: 0,
+        bytesTotal: item.file.size,
+        speedBytesPerSec: 0,
+      });
       try {
-        await api.uploadFile(volumeId, item.file, item.targetPath);
-        setItemState(item.id, { state: "done" });
+        await api.uploadFile(volumeId, item.file, item.targetPath, (progress) => {
+          const elapsedSec = Math.max((Date.now() - startedAt) / 1000, 0.1);
+          setItemState(item.id, {
+            state: "uploading",
+            progress: progress.percent,
+            bytesUploaded: progress.loaded,
+            bytesTotal: progress.total,
+            speedBytesPerSec: progress.loaded / elapsedSec,
+          });
+        });
+        setItemState(item.id, {
+          state: "done",
+          progress: 100,
+          bytesUploaded: item.file.size,
+          bytesTotal: item.file.size,
+          speedBytesPerSec: 0,
+        });
         onComplete?.();
       } catch (error) {
         setItemState(item.id, {
           state: "error",
           error: formatUploadError(error),
+          speedBytesPerSec: 0,
         });
       } finally {
         activeCount.current -= 1;
