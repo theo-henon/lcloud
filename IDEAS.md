@@ -271,6 +271,23 @@ Strategic shifts (new audience, new deployment model) → **VISION.md**, not IDE
 
 ---
 
+### Explorer **New** menu — plugin-extensible create actions
+**Context:** Volume explorer redesign (shipped) exposes a **New ▾** toolbar dropdown with a single built-in action: **New folder** (`ExplorerToolbar.tsx`). Operator direction: the menu should support **multiple create targets**, with **plugins** able to register entries — e.g. a Word plugin adds "Word document", an Excel plugin adds "Spreadsheet", similar to Google Drive / Microsoft 365 "New" menus. Today, creation is hard-coded in the frontend; plugins run on the event bus (`internal/plugin/`) but do not extend explorer UI. ADR 003 already defines a frontend `FileOpener` registry for *opening* files; no symmetric **CreateAction** / **NewMenuProvider** contract exists yet.
+**Value:** Office and domain plugins can offer one-click "create blank file in current folder" without forking the explorer; core stays a thin shell (folder + upload + plugin contributions); aligns with lcloud's plugin-first extensibility model.
+**Estimated effort:** Medium (frontend registry + API hook) to Heavy (plugin SDK + server-side file creation templates)
+**Dependencies:** Volume explorer redesign (shipped); plugin system (Phase 1.3); optional parallel to **FileOpener** registry pattern in `web/src/lib/fileOpeners/`
+**Date:** 2026-07-02
+
+**Possible scope (post-MVP `/spec`):**
+- **Frontend:** `registerCreateAction({ id, label, priority, canCreate?, create(ctx) })` merged into **New ▾** below core "New folder"; context = `{ volumeId, currentPath }`
+- **Plugin bridge:** event or RPC so plugins publish create actions at runtime (e.g. subscribe to `explorer.create.menu` or extend plugin manifest)
+- **Backend (if needed):** `POST .../files/create` with template bytes or empty-file MIME for plugin-created documents; reuse upload/quota/filter rules
+- **Out of scope v1:** full in-browser Office editing; cloud template galleries; per-user menu customization UI
+
+**Relationship:** mirrors **FileOpener** (open) ↔ **CreateAction** (new); complements plugin-backed openers in SPEC follow-up slice.
+
+---
+
 ### Monitoring dashboard — visual upgrade
 **Context:** MVP monitoring (`/monitoring`) shows disk cards, a volume table, and per-volume stats (used/quota, category bars, top MIME types). All usage bars use the same primary yellow — no color signal when a quota is nearly full. Data is **snapshot-only** (stats cache per volume, no history over time). The `alert_usage` task can fire on the event bus when a threshold is exceeded, but the monitoring UI does not surface alert state or tie into a notification center yet.
 **Value:** Understand disk and volume health at a glance: colored quota bars (green → yellow → red), charts for file-type breakdown, and optional trends so operators see problems before uploads fail — without reading raw numbers.
