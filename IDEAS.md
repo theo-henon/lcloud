@@ -295,6 +295,27 @@ Strategic shifts (new audience, new deployment model) → **VISION.md**, not IDE
 
 ---
 
+### Control panel iconography pass
+**Context:** MVP UI is text-heavy: sidebar nav items are labels only (no icons), toolbar/action buttons are mostly text ("Download", "Delete", "Create folder", "Logout"), and file rows lack type icons. `lucide-react` is already in `web/package.json` but unused in components. Operator feedback: the control panel feels sparse and harder to scan — icons beside nav entries and actions would improve recognition and visual hierarchy without changing behavior.
+**Value:** Faster navigation and clearer affordances: users spot Volumes vs Tasks vs Settings at a glance; actions read like a familiar desktop/cloud app; overall polish aligned with `design/DESIGN.md` (icon buttons documented, yellow + dark surfaces).
+**Estimated effort:** Quick to Medium
+**Dependencies:** `design/DESIGN.md`; optional coordination with volume explorer redesign and dashboard widgets (icons should stay consistent)
+**Date:** 2026-07-02
+
+**Operator direction:**
+- **Sidebar** — one icon per nav item (Dashboard, Volumes, Monitoring, Plugins, Tasks, Settings, Users); consistent size and muted color, primary tint when active
+- **Actions** — icon + label (or icon-only with tooltip) on common buttons: upload, new folder, refresh, download, delete, run task, logout
+- **Files & volumes** — folder / file-type icons in lists (image, video, document, generic file); optional disk/volume icons in cards
+- **Empty & status states** — light illustration or icon where it helps (empty folder, loading, error)
+
+**Possible scope (post-MVP `/spec`):**
+- Define a small **icon map** (nav + file categories + actions) in one module; Lucide defaults, no custom SVG sprawl
+- Roll out in passes: sidebar + header first, then volume/file browser, then tasks/plugins
+- Accessibility: decorative icons `aria-hidden`; icon-only buttons keep `aria-label`
+- **Out of scope:** custom brand icon set, animated icons, emoji-as-icons
+
+---
+
 ### Webhook notifications macro
 **Context:** Post-MVP macro — send an HTTP POST to an external URL on a condition (e.g. volume > 90% full).
 **Value:** Integration with external systems (Slack, Discord, custom automation webhooks).
