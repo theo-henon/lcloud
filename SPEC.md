@@ -3,7 +3,7 @@
 > **Status:** Draft — pending review
 > **Scope:** Task scheduler (gocron), macro executor, predefined macro vocabulary, task CRUD API, task history, Tasks UI. **MVP milestone** — last bootstrap phase.
 > **Prerequisite:** Phase 1.1 (volumes, files, metadata cache, Bleve indexer), Phase 1.2 (monitoring, `ComputeStats`, stats cache), Phase 1.3 (event bus, `task.executed` / `task.failed` / `volume.alert.usage` event types defined).
-> **Sources:** [STARTUP.md](./STARTUP.md#phase-14--task-system), [VISION.md](./VISION.md), [docs/project.md](./docs/project.md)
+> **Sources:** [VISION.md](./VISION.md), [docs/project.md](./docs/project.md)
 
 ---
 
@@ -939,6 +939,4 @@ Le minimum s'applique si l'utilisateur saisit un intervalle custom (ex. `5m` ref
 
 ## Next step
 
-After spec approval → `/plan` to produce `tasks/plan.md` with ordered, verifiable tasks.
-
-**Note:** Phase 1.4 completes the MVP defined in STARTUP.md. After ship, confirm deletion of STARTUP.md before starting post-MVP feature work.
+Post-MVP features start with `/spec` on a feature description. Park raw ideas in IDEAS.md first when scope is unclear.

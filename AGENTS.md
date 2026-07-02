@@ -30,11 +30,10 @@ Single operator. At session start, greet them by their `git config user.name` �
 Read these for project context (in this order):
 
 1. **VISION.md** — Strategic vision AND **decision filter** — read before any `/spec` or architecture decision. Every new feature should align with the vision; if alignment isn't clear, stop and clarify before specifying.
-2. **STARTUP.md** — **Temporary bootstrap document.** Contains the plan from Phase 0 to MVP. Will be deleted once MVP is reached.
-3. **docs/project.md** — Tech Stack, architecture, deployment workflow, constraints. **Source of truth for technical matters.**
-4. **README.md** — Current state, local setup, deployment workflow summary.
-5. **IDEAS.md** — Parking lot of future ideas (consult only when relevant).
-6. **design/DESIGN.md** *(present)* — ClickHouse design system (getdesign.md convention). Dark canvas (`#0a0a0a`), electric yellow (`#faff69`), Inter + JetBrains Mono. **Always read before generating any UI.**
+2. **docs/project.md** — Tech Stack, architecture, deployment workflow, constraints. **Source of truth for technical matters.**
+3. **README.md** — Current state, local setup, deployment workflow summary.
+4. **IDEAS.md** — Parking lot of future ideas (consult only when relevant).
+5. **design/DESIGN.md** *(present)* — ClickHouse design system (getdesign.md convention). Dark canvas (`#0a0a0a`), electric yellow (`#faff69`), Inter + JetBrains Mono. **Always read before generating any UI.**
 
 ---
 
@@ -44,7 +43,6 @@ Read these for project context (in this order):
 lcloud/
 ├── README.md                   Current state, setup
 ├── VISION.md                   Strategic vision
-├── STARTUP.md                  Bootstrap plan (TEMPORARY — delete after MVP)
 ├── IDEAS.md                    Parking lot for future ideas (English)
 ├── AGENTS.md                   This file
 ├── CLAUDE.md                   One-liner: @AGENTS.md (Claude Code compatibility)
@@ -139,11 +137,10 @@ When the user says `merge la PR`:
 3. Merge only if there is no blocker.
 4. Fetch and update `main`.
 
-### STARTUP.md lifecycle
-- STARTUP.md is **temporary** — guides bootstrap from Phase 0 to MVP
-- Once MVP reached, **STARTUP.md should be deleted** (ask for confirmation first)
-- Do NOT extend STARTUP.md with post-MVP phases
-- Post-MVP work → `/spec` on individual features; future ideas → IDEAS.md
+### Post-MVP development
+- MVP reached — bootstrap plan removed
+- New work is **feature-scoped**; `/spec` takes a feature description directly
+- Future ideas → IDEAS.md; do not revive a monolithic bootstrap roadmap file
 
 ### Documentation conventions
 - **Architecture Decision Records** in `docs/adr/` — use `documentation-and-adrs` for significant technical decisions
@@ -222,13 +219,9 @@ When a conversation has been exploratory and feels ready for `/spec`, propose a 
 If the user accepts → examine through the lens of simplicity, robustness, elegance.
 If the user declines → go directly to `/spec`.
 
-### Bootstrap vs post-MVP
+### Post-MVP workflow
 
-**While STARTUP.md exists:** new work = new phase from STARTUP.md. `/spec` takes the phase description as input; the agent reads STARTUP.md + VISION.md + docs/project.md for context.
-
-**Reaching MVP:** when the last phase of STARTUP.md is shipped, explicitly remind the user to delete STARTUP.md before continuing.
-
-**After MVP (STARTUP.md deleted):** new work is feature-scoped. `/spec` takes a feature description directly.
+New work is feature-scoped. `/spec` takes a feature description directly; the agent reads VISION.md + docs/project.md (+ IDEAS.md when relevant).
 
 ---
 
@@ -244,7 +237,6 @@ These come from Vercel and are installed separately — they are NOT part of the
 ## What agents should NOT do
 
 - Never modify `VISION.md` strategic structure (sections 1-5) without explicit user confirmation.
-- Never extend `STARTUP.md` with post-MVP phases — those go into IDEAS.md.
 - Never duplicate Tech Stack or Project Structure content — always reference `docs/project.md`.
 - Never commit secrets or real `.env` files.
 - Never bypass the `VolumeIndexer` interface — all indexing through `internal/indexer/`.
@@ -252,7 +244,6 @@ These come from Vercel and are installed separately — they are NOT part of the
 - Never change the volume directory structure or `.volume.json` schema without an ADR.
 - Never call plugin functions directly from outside `internal/plugin/` — all interactions through the event bus.
 - Never add macros to the predefined list without a `/spec` cycle.
-- Never delete STARTUP.md without explicit user confirmation that the MVP has been reached.
 - Never make an architectural decision without documenting it in `docs/adr/` via `documentation-and-adrs`.
 - Never invoke the `accessibility` skill unless VISION.md explicitly states an accessibility compliance requirement (WCAG, EAA, etc.).
 - Never put operator names in product/technical docs (VISION.md, IDEAS.md, docs/project.md). Operator names live only in the AGENTS.md "Operators" block.

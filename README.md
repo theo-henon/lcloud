@@ -6,15 +6,13 @@ A self-hosted, open-source, and extensible cloud storage platform. Deploy it on 
 
 ## Current state
 
-**Current phase:** Phase 1.1 — Volume management
-**Target MVP:** End of Phase 1.4
+**Status:** MVP reached (Phases 0–1.4 shipped)
 
-> Full startup plan: [STARTUP.md](./STARTUP.md)
 > Strategic vision: [VISION.md](./VISION.md)
 > Stack and architecture: [docs/project.md](./docs/project.md)
 > Parked ideas: [IDEAS.md](./IDEAS.md)
 
-Phase 1.1 delivers volume CRUD, multi-disk selection, file upload/download, extension filters, quotas, thumbnails, and Bleve metadata indexing.
+The MVP includes volume management, monitoring, the plugin system, and scheduled task automation (`/tasks`).
 
 ---
 
@@ -124,7 +122,6 @@ lcloud/
 ├── .env.example
 ├── README.md
 ├── VISION.md
-├── STARTUP.md              ← temporary, deleted after MVP
 ├── IDEAS.md
 ├── AGENTS.md
 ├── CLAUDE.md

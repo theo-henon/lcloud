@@ -106,7 +106,6 @@ Admin-only. Limited to `rebuild_index`, `compute_stats`, `alert_usage` — itera
 - `rebuild_index` must walk metadata cache after `BleveIndexer.Rebuild` — Rebuild alone clears without re-indexing
 - `clear_cache` wipes thumbnails + metadata only, not Bleve index
 - New macros require ADR + `/spec` cycle
-- MVP completion triggers STARTUP.md deletion (operator confirmation)
 
 ## Security rules
 

@@ -79,6 +79,5 @@ Each stage makes the next one possible. The plugin ecosystem built in Stage 2 is
 
 VISION.md is a living document. It grows richer as the project matures.
 The operational detail does not live here. See:
-- **STARTUP.md** for the bootstrap plan to MVP (temporary document)
 - **docs/project.md** for stack and technical architecture
 - **IDEAS.md** for future ideas not yet planned
