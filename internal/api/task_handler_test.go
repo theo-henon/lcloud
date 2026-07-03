@@ -349,3 +349,123 @@ func TestTaskListOmitsOwnerEmailForRegularUser(t *testing.T) {
 	_, hasOwnerEmail := item["owner_email"]
 	require.False(t, hasOwnerEmail)
 }
+
+func TestVolumeListFilterByOwnerForAdmin(t *testing.T) {
+	router, service, volumeService, diskPath := setupTestRouter(t)
+
+	user, err := service.CreateUser("creator@example.com", "password123", auth.RoleUser)
+	require.NoError(t, err)
+
+	_, err = volumeService.Create(
+		&auth.Claims{UserID: user.ID, Role: auth.RoleUser},
+		volume.CreateVolumeInput{Name: "User Vol", DiskPath: diskPath},
+	)
+	require.NoError(t, err)
+
+	adminLogin, err := service.Login("admin@example.com", "adminpass1")
+	require.NoError(t, err)
+
+	adminVolBody, err := json.Marshal(map[string]any{
+		"name":        "Admin Vol",
+		"disk_path":   diskPath,
+		"quota_bytes": 0,
+		"filters":     map[string]any{},
+	})
+	require.NoError(t, err)
+	adminVolReq := httptest.NewRequest(http.MethodPost, "/api/volumes", bytes.NewReader(adminVolBody))
+	adminVolReq.Header.Set("Content-Type", "application/json")
+	adminVolReq.Header.Set("Authorization", "Bearer "+adminLogin.AccessToken)
+	adminVolRec := httptest.NewRecorder()
+	router.ServeHTTP(adminVolRec, adminVolReq)
+	require.Equal(t, http.StatusCreated, adminVolRec.Code)
+
+	listAllReq := httptest.NewRequest(http.MethodGet, "/api/volumes", nil)
+	listAllReq.Header.Set("Authorization", "Bearer "+adminLogin.AccessToken)
+	listAllRec := httptest.NewRecorder()
+	router.ServeHTTP(listAllRec, listAllReq)
+	require.Equal(t, http.StatusOK, listAllRec.Code)
+
+	var allResp struct {
+		Volumes []struct {
+			Name string `json:"name"`
+		} `json:"volumes"`
+	}
+	require.NoError(t, json.Unmarshal(listAllRec.Body.Bytes(), &allResp))
+	require.GreaterOrEqual(t, len(allResp.Volumes), 2)
+
+	filterReq := httptest.NewRequest(
+		http.MethodGet,
+		"/api/volumes?owner_id="+user.ID.String(),
+		nil,
+	)
+	filterReq.Header.Set("Authorization", "Bearer "+adminLogin.AccessToken)
+	filterRec := httptest.NewRecorder()
+	router.ServeHTTP(filterRec, filterReq)
+	require.Equal(t, http.StatusOK, filterRec.Code)
+
+	var filteredResp struct {
+		Volumes []struct {
+			Name string `json:"name"`
+		} `json:"volumes"`
+	}
+	require.NoError(t, json.Unmarshal(filterRec.Body.Bytes(), &filteredResp))
+	require.Len(t, filteredResp.Volumes, 1)
+	require.Equal(t, "User Vol", filteredResp.Volumes[0].Name)
+}
+
+func TestTaskListFilterByOwnerForAdmin(t *testing.T) {
+	router, service, volumeService, diskPath := setupTestRouter(t)
+
+	user, err := service.CreateUser("creator@example.com", "password123", auth.RoleUser)
+	require.NoError(t, err)
+
+	vol, err := volumeService.Create(
+		&auth.Claims{UserID: user.ID, Role: auth.RoleUser},
+		volume.CreateVolumeInput{Name: "Photos", DiskPath: diskPath},
+	)
+	require.NoError(t, err)
+
+	userLogin, err := service.Login("creator@example.com", "password123")
+	require.NoError(t, err)
+
+	createBody, err := json.Marshal(map[string]any{
+		"name":          "User task",
+		"macro":         task.MacroDeleteOldFiles,
+		"scope":         task.ScopeVolume,
+		"volume_id":     vol.ID.String(),
+		"parameters":    map[string]any{"days": 90},
+		"schedule_type": task.ScheduleTypeCron,
+		"schedule":      "0 2 * * 0",
+		"enabled":       true,
+	})
+	require.NoError(t, err)
+
+	createReq := httptest.NewRequest(http.MethodPost, "/api/tasks", bytes.NewReader(createBody))
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.Header.Set("Authorization", "Bearer "+userLogin.AccessToken)
+	createRec := httptest.NewRecorder()
+	router.ServeHTTP(createRec, createReq)
+	require.Equal(t, http.StatusCreated, createRec.Code)
+
+	adminLogin, err := service.Login("admin@example.com", "adminpass1")
+	require.NoError(t, err)
+
+	filterReq := httptest.NewRequest(
+		http.MethodGet,
+		"/api/tasks?owner_id="+user.ID.String(),
+		nil,
+	)
+	filterReq.Header.Set("Authorization", "Bearer "+adminLogin.AccessToken)
+	filterRec := httptest.NewRecorder()
+	router.ServeHTTP(filterRec, filterReq)
+	require.Equal(t, http.StatusOK, filterRec.Code)
+
+	var resp struct {
+		Tasks []struct {
+			Name string `json:"name"`
+		} `json:"tasks"`
+	}
+	require.NoError(t, json.Unmarshal(filterRec.Body.Bytes(), &resp))
+	require.Len(t, resp.Tasks, 1)
+	require.Equal(t, "User task", resp.Tasks[0].Name)
+}

@@ -40,7 +40,7 @@ func (s *Service) GetOverview(ctx context.Context, claims *auth.Claims) (*Overvi
 	_ = ctx
 
 	disks := s.disks.ListDisks()
-	volumes, err := s.volumes.List(claims)
+	volumes, err := s.volumes.List(claims, nil)
 	if err != nil {
 		return nil, err
 	}

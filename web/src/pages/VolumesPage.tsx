@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Header } from "@/components/layout/Header";
+import { OwnerFilter } from "@/components/filters/OwnerFilter";
 import { CreateVolumeForm } from "@/components/volumes/CreateVolumeForm";
 import { DeletionRequestsPanel } from "@/components/volumes/DeletionRequestsPanel";
 import { VolumeCard } from "@/components/volumes/VolumeCard";
@@ -17,15 +18,18 @@ import {
 import { ActionIcon, navIcons } from "@/lib/icons";
 import { ApiError } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
+import { useAdminUsers } from "@/hooks/useUsers";
 
 export function VolumesPage() {
   const user = useAuthStore((state) => state.user);
   const isAdmin = user?.role === "admin";
+  const [ownerFilter, setOwnerFilter] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const disksQuery = useDisks();
-  const volumesQuery = useVolumes();
+  const usersQuery = useAdminUsers();
+  const volumesQuery = useVolumes(isAdmin && ownerFilter ? ownerFilter : undefined);
   const deletionRequestsQuery = useVolumeDeletionRequests(isAdmin);
   const createVolume = useCreateVolume();
   const patchVolume = usePatchVolume();
@@ -59,6 +63,16 @@ export function VolumesPage() {
         ) : null}
 
         {isAdmin ? <DeletionRequestsPanel requests={deletionRequests} /> : null}
+
+        {isAdmin && usersQuery.data ? (
+          <OwnerFilter
+            value={ownerFilter}
+            currentUserId={user!.id}
+            currentUserEmail={user!.email}
+            users={usersQuery.data.users}
+            onChange={setOwnerFilter}
+          />
+        ) : null}
 
         {showCreate ? (
           <Card className="p-6">

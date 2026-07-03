@@ -59,7 +59,21 @@ func (h *TaskHandler) List(c *gin.Context) {
 		volumeID = &id
 	}
 
-	tasks, err := h.tasks.List(claims, volumeID)
+	var ownerID *uuid.UUID
+	if raw := c.Query("owner_id"); raw != "" {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			httputil.BadRequest(c, "invalid owner_id")
+			return
+		}
+		if claims.Role != auth.RoleAdmin && id != claims.UserID {
+			httputil.Forbidden(c, "forbidden")
+			return
+		}
+		ownerID = &id
+	}
+
+	tasks, err := h.tasks.List(claims, volumeID, ownerID)
 	if err != nil {
 		httputil.InternalError(c, "unable to list tasks")
 		return

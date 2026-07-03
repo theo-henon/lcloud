@@ -118,7 +118,7 @@ func (h *SearchHandler) SearchAll(c *gin.Context) {
 		return
 	}
 
-	volumes, err := h.volumes.List(claims)
+	volumes, err := h.volumes.List(claims, nil)
 	if err != nil {
 		httputil.InternalError(c, "unable to list volumes")
 		return

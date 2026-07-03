@@ -46,10 +46,12 @@ func (s *Service) SetEventPublisher(events EventPublisher) {
 	s.events = events
 }
 
-func (s *Service) List(claims *auth.Claims) ([]Volume, error) {
+func (s *Service) List(claims *auth.Claims, ownerID *uuid.UUID) ([]Volume, error) {
 	query := s.db.Order("created_at desc")
 	if claims.Role != auth.RoleAdmin {
 		query = query.Where("owner_id = ?", claims.UserID)
+	} else if ownerID != nil {
+		query = query.Where("owner_id = ?", *ownerID)
 	}
 
 	var volumes []Volume

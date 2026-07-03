@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type CreateVolumeInput, type PatchVolumeInput } from "@/lib/api";
 
-export function useVolumes() {
+export function useVolumes(ownerId?: string) {
   return useQuery({
-    queryKey: ["volumes"],
-    queryFn: () => api.listVolumes(),
+    queryKey: ["volumes", ownerId ?? "all"],
+    queryFn: () => api.listVolumes(ownerId),
   });
 }
 

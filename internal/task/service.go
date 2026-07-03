@@ -122,10 +122,12 @@ func (s *Service) Create(ctx context.Context, claims *auth.Claims, input CreateT
 	return s.toView(&task)
 }
 
-func (s *Service) List(claims *auth.Claims, volumeID *uuid.UUID) ([]TaskView, error) {
+func (s *Service) List(claims *auth.Claims, volumeID *uuid.UUID, ownerID *uuid.UUID) ([]TaskView, error) {
 	query := s.db.Order("created_at desc")
 	if claims.Role != auth.RoleAdmin {
 		query = query.Where("owner_id = ?", claims.UserID)
+	} else if ownerID != nil {
+		query = query.Where("owner_id = ?", *ownerID)
 	}
 	if volumeID != nil {
 		query = query.Where("volume_id = ?", *volumeID)

@@ -447,8 +447,13 @@ export const api = {
   listDisks() {
     return apiRequest<{ disks: DiskInfo[] }>("/api/disks");
   },
-  listVolumes() {
-    return apiRequest<{ volumes: Volume[] }>("/api/volumes");
+  listVolumes(ownerId?: string) {
+    const params = new URLSearchParams();
+    if (ownerId) {
+      params.set("owner_id", ownerId);
+    }
+    const query = params.toString() ? `?${params.toString()}` : "";
+    return apiRequest<{ volumes: Volume[] }>(`/api/volumes${query}`);
   },
   getVolume(id: string) {
     return apiRequest<Volume>(`/api/volumes/${id}`);
@@ -606,8 +611,15 @@ export const api = {
       body: JSON.stringify(input),
     });
   },
-  listTasks(volumeId?: string) {
-    const query = volumeId ? `?volume_id=${encodeURIComponent(volumeId)}` : "";
+  listTasks(filters?: { volumeId?: string; ownerId?: string }) {
+    const params = new URLSearchParams();
+    if (filters?.volumeId) {
+      params.set("volume_id", filters.volumeId);
+    }
+    if (filters?.ownerId) {
+      params.set("owner_id", filters.ownerId);
+    }
+    const query = params.toString() ? `?${params.toString()}` : "";
     return apiRequest<{ tasks: TaskRecord[] }>(`/api/tasks${query}`);
   },
   getTask(id: string) {
