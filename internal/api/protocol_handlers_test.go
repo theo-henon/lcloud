@@ -47,6 +47,7 @@ func TestProtocolHandlers(t *testing.T) {
 			"webdav": map[string]bool{"enabled": true},
 		})
 		req := httptest.NewRequest(http.MethodPatch, "/api/volumes/"+vol.ID.String()+"/protocols", bytes.NewReader(body))
+		req.Host = "localhost:8080"
 		req.Header.Set("Authorization", "Bearer "+login.AccessToken)
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
@@ -57,6 +58,7 @@ func TestProtocolHandlers(t *testing.T) {
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 		require.True(t, resp.WebDAV.Enabled)
 		require.Contains(t, resp.Connection.WebDAVURL, vol.ID.String())
+		require.Contains(t, resp.Connection.WebDAVURL, "localhost:8080")
 		require.Equal(t, vol.ID.String(), resp.Connection.FTPUsername)
 	})
 

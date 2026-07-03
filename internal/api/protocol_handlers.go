@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"net"
 	"net/http"
 	"strings"
 
@@ -53,6 +54,7 @@ func (h *ProtocolHandler) Get(c *gin.Context) {
 		return
 	}
 
+	h.enrichConnection(c, info, volumeID)
 	httputil.JSON(c, http.StatusOK, info)
 }
 
@@ -97,26 +99,42 @@ func (h *ProtocolHandler) Patch(c *gin.Context) {
 		return
 	}
 
-	host := requestHost(c)
-	info.Connection.WebDAVURL = buildWebDAVURL(host, volumeID)
-	info.Connection.FTPHost = host
-	info.Connection.FTPPort = h.ftpPort
-
+	h.enrichConnection(c, info, volumeID)
 	httputil.JSON(c, http.StatusOK, info)
 }
 
-func requestHost(c *gin.Context) string {
-	if forwarded := c.GetHeader("X-Forwarded-Host"); forwarded != "" {
-		if host := strings.Split(forwarded, ",")[0]; host != "" {
-			return strings.TrimSpace(strings.Split(host, ":")[0])
-		}
-	}
-	if host := c.Request.Host; host != "" {
-		return strings.Split(host, ":")[0]
-	}
-	return "localhost"
+func (h *ProtocolHandler) enrichConnection(c *gin.Context, info *volume.ProtocolsInfo, volumeID uuid.UUID) {
+	authority := requestAuthority(c)
+	info.Connection.WebDAVURL = buildWebDAVURL(c, authority, volumeID)
+	info.Connection.FTPHost = requestHost(c)
+	info.Connection.FTPPort = h.ftpPort
 }
 
-func buildWebDAVURL(host string, volumeID uuid.UUID) string {
-	return "http://" + host + "/dav/volumes/" + volumeID.String() + "/"
+func requestAuthority(c *gin.Context) string {
+	if forwarded := c.GetHeader("X-Forwarded-Host"); forwarded != "" {
+		if host := strings.TrimSpace(strings.Split(forwarded, ",")[0]); host != "" {
+			return host
+		}
+	}
+	if c.Request.Host != "" {
+		return c.Request.Host
+	}
+	return "localhost:8080"
+}
+
+func requestHost(c *gin.Context) string {
+	authority := requestAuthority(c)
+	host, _, err := net.SplitHostPort(authority)
+	if err != nil {
+		return authority
+	}
+	return host
+}
+
+func buildWebDAVURL(c *gin.Context, authority string, volumeID uuid.UUID) string {
+	scheme := "http"
+	if proto := c.GetHeader("X-Forwarded-Proto"); proto == "https" {
+		scheme = "https"
+	}
+	return scheme + "://" + authority + "/dav/volumes/" + volumeID.String() + "/"
 }

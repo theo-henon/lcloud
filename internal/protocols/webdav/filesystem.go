@@ -54,6 +54,10 @@ func (fs *volumeFS) OpenFile(ctx context.Context, name string, flag int, perm os
 		}, nil
 	}
 
+	if info, statErr := fs.Stat(ctx, name); statErr == nil && info.IsDir() {
+		return &dirFile{fs: fs, rel: rel, info: info}, nil
+	}
+
 	file, mimeType, err := fs.files.OpenContent(fs.claims, fs.volumeID, rel)
 	if err != nil {
 		return nil, mapError(err)
@@ -196,6 +200,37 @@ type readFile struct {
 
 func (f *readFile) Readdir(count int) ([]os.FileInfo, error) {
 	return nil, os.ErrInvalid
+}
+
+type dirFile struct {
+	fs   *volumeFS
+	rel  string
+	info os.FileInfo
+}
+
+func (d *dirFile) Close() error { return nil }
+
+func (d *dirFile) Read([]byte) (int, error) { return 0, io.EOF }
+
+func (d *dirFile) Write([]byte) (int, error) { return 0, os.ErrPermission }
+
+func (d *dirFile) Seek(int64, int) (int64, error) { return 0, os.ErrInvalid }
+
+func (d *dirFile) Stat() (os.FileInfo, error) { return d.info, nil }
+
+func (d *dirFile) Readdir(count int) ([]os.FileInfo, error) {
+	listing, err := d.fs.files.List(d.fs.claims, d.fs.volumeID, d.rel)
+	if err != nil {
+		return nil, mapError(err)
+	}
+	infos := make([]os.FileInfo, len(listing.Entries))
+	for i, entry := range listing.Entries {
+		infos[i] = entryInfo{entry: entry}
+	}
+	if count > 0 && len(infos) > count {
+		infos = infos[:count]
+	}
+	return infos, nil
 }
 
 type uploadFile struct {
