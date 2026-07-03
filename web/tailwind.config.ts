@@ -30,6 +30,11 @@ const config: Config = {
           elevated: "#242424",
         },
         "on-primary": "#0a0a0a",
+        accent: {
+          emerald: "#22c55e",
+          rose: "#ef4444",
+          amber: "#f59e0b",
+        },
         success: "#22c55e",
         error: "#ef4444",
       },
