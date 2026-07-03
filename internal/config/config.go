@@ -23,6 +23,10 @@ type Config struct {
 	AppPort                string
 	GinMode                string
 	PluginsPath            string
+	FTPPort                int
+	FTPPasvMin             int
+	FTPPasvMax             int
+	FTPPasvAddress         string
 }
 
 func Load() (*Config, error) {
@@ -40,6 +44,10 @@ func Load() (*Config, error) {
 		RefreshTokenExpiryDays: getEnvInt("REFRESH_TOKEN_EXPIRY_DAYS", 7),
 		MaxUploadBytes:         getEnvInt64("MAX_UPLOAD_BYTES", defaultMaxUploadBytes),
 		PluginsPath:            getEnv("PLUGINS_PATH", "./plugins"),
+		FTPPort:                getEnvInt("FTP_PORT", 2121),
+		FTPPasvMin:             getEnvInt("FTP_PASV_MIN", 30000),
+		FTPPasvMax:             getEnvInt("FTP_PASV_MAX", 30010),
+		FTPPasvAddress:         getEnv("FTP_PASV_ADDRESS", "127.0.0.1"),
 	}
 
 	if cfg.DatabaseURL == "" {

@@ -49,8 +49,24 @@ func (f *Filters) Scan(value any) error {
 }
 
 type EncryptionConfig struct {
-	Enabled bool   `json:"enabled"`
+	Enabled bool    `json:"enabled"`
 	Method  *string `json:"method"`
+}
+
+func (p ProtocolsConfig) Value() (driver.Value, error) {
+	return json.Marshal(p)
+}
+
+func (p *ProtocolsConfig) Scan(value any) error {
+	if value == nil {
+		*p = DefaultProtocolsConfig()
+		return nil
+	}
+	bytes, ok := value.([]byte)
+	if !ok {
+		return fmt.Errorf("protocols: expected []byte, got %T", value)
+	}
+	return json.Unmarshal(bytes, p)
 }
 
 type VolumeConfig struct {
@@ -59,6 +75,7 @@ type VolumeConfig struct {
 	OwnerID    uuid.UUID        `json:"owner_id"`
 	QuotaBytes int64            `json:"quota_bytes"`
 	Filters    Filters          `json:"filters"`
+	Protocols  ProtocolsConfig  `json:"protocols"`
 	Encryption EncryptionConfig `json:"encryption"`
 	CreatedAt  time.Time        `json:"created_at"`
 	DiskPath   string           `json:"disk_path"`
@@ -73,8 +90,9 @@ type Volume struct {
 	RootPath   string    `gorm:"not null" json:"root_path"`
 	QuotaBytes int64     `gorm:"not null;default:0" json:"quota_bytes"`
 	UsedBytes  int64     `gorm:"not null;default:0" json:"used_bytes"`
-	Filters    Filters   `gorm:"type:jsonb;not null" json:"filters"`
-	CreatedAt  time.Time `json:"created_at"`
+	Filters    Filters         `gorm:"type:jsonb;not null" json:"filters"`
+	Protocols  ProtocolsConfig `gorm:"type:jsonb;not null" json:"protocols"`
+	CreatedAt  time.Time       `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
@@ -89,6 +107,7 @@ func (v *Volume) ToConfig() VolumeConfig {
 		OwnerID:    v.OwnerID,
 		QuotaBytes: v.QuotaBytes,
 		Filters:    v.Filters,
+		Protocols:  NormalizeProtocols(v.Protocols),
 		Encryption: EncryptionConfig{Enabled: false, Method: nil},
 		CreatedAt:  v.CreatedAt,
 		DiskPath:   v.DiskPath,
@@ -106,6 +125,7 @@ func volumeFromConfig(cfg VolumeConfig, rootPath string) *Volume {
 		QuotaBytes: cfg.QuotaBytes,
 		UsedBytes:  cfg.UsedBytes,
 		Filters:    cfg.Filters,
+		Protocols:  NormalizeProtocols(cfg.Protocols),
 		CreatedAt:  cfg.CreatedAt,
 		UpdatedAt:  time.Now().UTC(),
 	}

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"embed"
+	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
@@ -16,6 +17,8 @@ import (
 	"github.com/theo-henon/lcloud/internal/indexer"
 	"github.com/theo-henon/lcloud/internal/monitoring"
 	"github.com/theo-henon/lcloud/internal/plugin"
+	"github.com/theo-henon/lcloud/internal/protocols"
+	protocolftp "github.com/theo-henon/lcloud/internal/protocols/ftp"
 	"github.com/theo-henon/lcloud/internal/settings"
 	"github.com/theo-henon/lcloud/internal/task"
 	"github.com/theo-henon/lcloud/internal/volume"
@@ -80,6 +83,19 @@ func main() {
 	taskService.SetScheduler(taskScheduler)
 	fileService.SetEventPublisher(pluginService.Publisher())
 
+	protocolGateway := protocols.NewGateway(authService, volumeService, fileService, settingsService, cfg.FTPPort)
+	ftpServer := protocolftp.NewServer(
+		protocolGateway,
+		fmt.Sprintf(":%d", cfg.FTPPort),
+		cfg.FTPPasvAddress,
+		cfg.FTPPasvMin,
+		cfg.FTPPasvMax,
+	)
+	if err := ftpServer.Start(); err != nil {
+		log.Fatalf("ftp server: %v", err)
+	}
+	defer ftpServer.Stop()
+
 	ctx := context.Background()
 	if err := pluginService.Start(ctx); err != nil {
 		log.Fatalf("plugin startup: %v", err)
@@ -114,6 +130,8 @@ func main() {
 		TaskService:       taskService,
 		IndexManager:      indexManager,
 		MaxUploadBytes:    cfg.MaxUploadBytes,
+		FTPPort:           cfg.FTPPort,
+		ProtocolGateway:   protocolGateway,
 		StaticFS:          staticFS,
 		GinMode:           cfg.GinMode,
 	})
@@ -125,6 +143,7 @@ func main() {
 		ch := make(chan os.Signal, 1)
 		signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
 		<-ch
+		ftpServer.Stop()
 		_ = taskScheduler.Shutdown()
 		pluginService.Stop()
 		_ = server.Close()

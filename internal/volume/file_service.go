@@ -158,6 +158,42 @@ func (s *FileService) CreateDirectory(claims *auth.Claims, volumeID uuid.UUID, r
 	return os.MkdirAll(absDir, 0o755)
 }
 
+func (s *FileService) RemoveDirectory(claims *auth.Claims, volumeID uuid.UUID, relPath string) error {
+	vol, err := s.volumes.Get(claims, volumeID)
+	if err != nil {
+		return err
+	}
+
+	clean := cleanRelativePath(relPath)
+	if clean == "." || clean == "" {
+		return ErrInvalidFilter
+	}
+
+	absDir, err := s.paths.ResolveUserdata(vol.RootPath, clean)
+	if err != nil {
+		return err
+	}
+	info, err := os.Stat(absDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return ErrFileNotFound
+		}
+		return err
+	}
+	if !info.IsDir() {
+		return ErrNotDirectory
+	}
+
+	entries, err := os.ReadDir(absDir)
+	if err != nil {
+		return err
+	}
+	if len(entries) > 0 {
+		return ErrDirectoryNotEmpty
+	}
+	return os.Remove(absDir)
+}
+
 func (s *FileService) Upload(claims *auth.Claims, volumeID uuid.UUID, relDir, filename string, reader io.Reader, size int64) (*FileEntry, error) {
 	vol, err := s.volumes.Get(claims, volumeID)
 	if err != nil {

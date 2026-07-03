@@ -15,6 +15,7 @@ import (
 	"github.com/theo-henon/lcloud/internal/indexer"
 	"github.com/theo-henon/lcloud/internal/monitoring"
 	"github.com/theo-henon/lcloud/internal/plugin"
+	"github.com/theo-henon/lcloud/internal/protocols"
 	"github.com/theo-henon/lcloud/internal/settings"
 	"github.com/theo-henon/lcloud/internal/task"
 	"github.com/theo-henon/lcloud/internal/volume"
@@ -65,6 +66,8 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *auth.Service, *volume.Service,
 		TaskService:       taskService,
 		IndexManager:      indexManager,
 		MaxUploadBytes:    cfg.MaxUploadBytes,
+		FTPPort:           2121,
+		ProtocolGateway:   protocols.NewGateway(service, volumeService, fileService, settingsService, 2121),
 		GinMode:           gin.TestMode,
 	})
 

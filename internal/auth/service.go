@@ -419,3 +419,57 @@ func hashToken(raw string) string {
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])
 }
+
+// AuthenticateForVolume validates password against the volume owner, then any active admin.
+// Used by FTP where the username is the volume UUID.
+func (s *Service) AuthenticateForVolume(volumeID uuid.UUID, password string) (*Claims, error) {
+	var vol struct {
+		OwnerID uuid.UUID
+	}
+	if err := s.db.Table("volumes").Select("owner_id").Where("id = ?", volumeID).First(&vol).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrInvalidCredentials
+		}
+		return nil, err
+	}
+
+	owner, err := s.GetUserByID(vol.OwnerID)
+	if err != nil {
+		return nil, err
+	}
+	if owner.DisabledAt == nil {
+		if err := bcrypt.CompareHashAndPassword([]byte(owner.PasswordHash), []byte(password)); err == nil {
+			return &Claims{UserID: owner.ID, Email: owner.Email, Role: owner.Role}, nil
+		}
+	}
+
+	var admins []User
+	if err := s.db.Where("role = ? AND disabled_at IS NULL", RoleAdmin).Find(&admins).Error; err != nil {
+		return nil, err
+	}
+	for i := range admins {
+		if err := bcrypt.CompareHashAndPassword([]byte(admins[i].PasswordHash), []byte(password)); err == nil {
+			return &Claims{UserID: admins[i].ID, Email: admins[i].Email, Role: admins[i].Role}, nil
+		}
+	}
+
+	return nil, ErrInvalidCredentials
+}
+
+// ValidateCredentials checks email/password without issuing tokens.
+func (s *Service) ValidateCredentials(email, password string) (*Claims, error) {
+	var user User
+	if err := s.db.Where("email = ?", email).First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrInvalidCredentials
+		}
+		return nil, err
+	}
+	if user.DisabledAt != nil {
+		return nil, ErrUserDisabled
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+		return nil, ErrInvalidCredentials
+	}
+	return &Claims{UserID: user.ID, Email: user.Email, Role: user.Role}, nil
+}

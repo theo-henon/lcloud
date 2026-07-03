@@ -42,8 +42,8 @@ func (h *AdminSettingsHandler) Patch(c *gin.Context) {
 		httputil.BadRequest(c, "invalid request body")
 		return
 	}
-	if input.MaskDiskNames == nil {
-		httputil.BadRequest(c, "mask_disk_names is required")
+	if input.MaskDiskNames == nil && input.ProtocolsWebDAVEnabled == nil && input.ProtocolsFTPEnabled == nil {
+		httputil.BadRequest(c, "at least one setting field required")
 		return
 	}
 

@@ -39,7 +39,7 @@ func (s *Service) Public() (PublicSettings, error) {
 	if err != nil {
 		return PublicSettings{}, err
 	}
-	return PublicSettings{MaskDiskNames: settings.MaskDiskNames}, nil
+	return s.toPublic(settings), nil
 }
 
 func (s *Service) Update(input UpdateSettingsInput) (PublicSettings, error) {
@@ -50,10 +50,40 @@ func (s *Service) Update(input UpdateSettingsInput) (PublicSettings, error) {
 	if input.MaskDiskNames != nil {
 		settings.MaskDiskNames = *input.MaskDiskNames
 	}
+	if input.ProtocolsWebDAVEnabled != nil {
+		settings.ProtocolsWebDAVEnabled = *input.ProtocolsWebDAVEnabled
+	}
+	if input.ProtocolsFTPEnabled != nil {
+		settings.ProtocolsFTPEnabled = *input.ProtocolsFTPEnabled
+	}
 	if err := s.db.Save(&settings).Error; err != nil {
 		return PublicSettings{}, err
 	}
-	return PublicSettings{MaskDiskNames: settings.MaskDiskNames}, nil
+	return s.toPublic(settings), nil
+}
+
+func (s *Service) ProtocolsWebDAVEnabled() (bool, error) {
+	settings, err := s.Get()
+	if err != nil {
+		return false, err
+	}
+	return settings.ProtocolsWebDAVEnabled, nil
+}
+
+func (s *Service) ProtocolsFTPEnabled() (bool, error) {
+	settings, err := s.Get()
+	if err != nil {
+		return false, err
+	}
+	return settings.ProtocolsFTPEnabled, nil
+}
+
+func (s *Service) toPublic(settings InstanceSettings) PublicSettings {
+	return PublicSettings{
+		MaskDiskNames:          settings.MaskDiskNames,
+		ProtocolsWebDAVEnabled: settings.ProtocolsWebDAVEnabled,
+		ProtocolsFTPEnabled:    settings.ProtocolsFTPEnabled,
+	}
 }
 
 func (s *Service) ShouldMaskFor(_ *auth.Claims) (bool, error) {
