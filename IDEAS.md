@@ -179,6 +179,7 @@ Strategic shifts (new audience, new deployment model) → **VISION.md**, not IDE
 
 **Possible scope (post-MVP `/spec`):**
 - Notification model + API (`GET /notifications`, mark read, dismiss)
+- **Volume deletion requests (phase B)** — admin notified when a `user` requests volume deletion (see **User-owned volumes and deletion requests**)
 - UI: toast on new alert, sidebar/header bell with history
 - Subscribers: `volume.alert.usage`, `task.failed`, plugin custom events
 - Out of scope for v1 of this idea: email, push, SMS (those stay plugin/webhook territory)
@@ -202,6 +203,40 @@ Strategic shifts (new audience, new deployment model) → **VISION.md**, not IDE
 - UI: replace placeholder at `/settings/users` — user table, **admin-only create-user form**, role badges
 - Safeguards: cannot demote/delete the last admin; optional disable instead of hard delete
 - **Explicitly out of scope** (this project, for now): self-service signup, registration page, OAuth/SSO, password-reset email, per-volume ACL (volume ownership is a separate idea)
+
+---
+
+### User-owned volumes and deletion requests
+**Context:** MVP restricts **volume creation** to `admin` only (`POST /api/volumes` + `RequireAdmin`). Regular `user` accounts see only volumes they own (`owner_id`), but cannot create any — empty state still says « Create one », which is misleading. **Deletion** today: owner or admin can delete (empty volume); force-delete is admin-only. Disk list for non-admins already masks labels (`Storage 1`, …) but returns an empty `path` — users cannot pick a disk for creation until server-side binding exists. Post–User management UI discussion (2026-07-03): family/small-team use needs autonomous `user` spaces without making everyone admin.
+**Value:** Each household member manages their own storage (upload, rename, quotas on their volumes) while the instance admin keeps control of destructive ops (delete) and physical disk layout. Users choose storage by **masked name + free space**, not server paths.
+**Estimated effort:** Medium (permissions + disk binding + deletion queue); notification polish is Medium+ once alert center exists
+**Dependencies:** User management UI (shipped); volume module (shipped); optional **In-app notification system** for phase B of deletion requests
+**Date:** 2026-07-03
+
+**Product decisions (operator, 2026-07-03):**
+
+| Role | Create volume | Use own volumes | Delete volume |
+|---|---|---|---|
+| `user` | Yes (own volumes only) | Yes | **No** — request deletion |
+| `admin` | Yes | All volumes | Yes (incl. force when non-empty) |
+
+- **Disk picker for users** — dropdown shows **masked storage names** (e.g. `Storage 1`) and **remaining free space** only; no physical paths. Server maintains an internal binding (index or stable id → real `disk_path`) so creation works without exposing homelab paths. Admins keep real disk names/paths when `mask_disk_names` is off or for admin-only create flows.
+- **Ownership** — volume `owner_id` = creating user; list/file APIs unchanged (user sees own, admin sees all).
+- **Deletion requests — phase A (v1):** `user` clicks « Request deletion » on own volume → row in an **admin queue** (Volumes or Settings); admin approves by deleting (or rejects / dismisses). No email. Minimal persistence (PostgreSQL `volume_deletion_requests` or similar).
+- **Deletion requests — phase B (later):** push into **In-app notification system** (bell / unread) when that idea ships — same queue, better visibility for admin.
+- **User limits — v1:** **full trust** (no cap on volume count or per-user quota).
+- **User limits — later (configurable):** instance settings for **max volumes per user** and **default or max quota per volume per user** — admin-tunable when homelab grows.
+
+**Possible scope (post-MVP `/spec`):**
+- Remove `RequireAdmin()` from `POST /api/volumes`; show Create volume for `user` role
+- Disk API: expose creatable disk id for masked entries; create volume accepts `disk_id` or masked key, server resolves path
+- Block `DELETE /api/volumes/:id` for non-admin owners; add `POST /api/volumes/:id/deletion-request` + admin list/dismiss/approve
+- UI: role-aware empty state; hide Delete / show Request deletion for `user`; admin deletion-request panel
+- Fix misleading empty state on Volumes page for non-admins
+
+**Explicitly out of scope (v1):** per-volume sharing between users (see **In-instance volume sharing**); email on deletion request; user self-delete
+
+**Relationship:** complements **User management UI** (accounts exist) and precedes **In-instance volume sharing** (own volumes first, share later).
 
 ---
 
