@@ -48,14 +48,10 @@ func (s *Server) Start() error {
 		return nil
 	}
 
-	enabled, err := s.gateway.Settings().ProtocolsFTPEnabled()
-	if err != nil {
-		return err
-	}
-	if !enabled {
-		return nil
-	}
-
+	// Always bind the FTP port. Instance/volume access is enforced at login
+	// (same model as WebDAV, which is always mounted). Skipping Listen when
+	// FTP was disabled at boot broke connections after enabling FTP in Settings
+	// without restarting the container.
 	s.ftp = ftpserver.NewFtpServer(s.driver)
 	if err := s.ftp.Listen(); err != nil {
 		return fmt.Errorf("ftp listen: %w", err)
@@ -92,7 +88,14 @@ func (d *mainDriver) GetSettings() (*ftpserver.Settings, error) {
 }
 
 func (d *mainDriver) ClientConnected(cc ftpserver.ClientContext) (string, error) {
-	return "220 lcloud FTP ready", nil
+	enabled, err := d.gateway.Settings().ProtocolsFTPEnabled()
+	if err != nil {
+		return "", fmt.Errorf("421 service unavailable")
+	}
+	if !enabled {
+		return "", fmt.Errorf("421 FTP disabled — enable it in admin Settings")
+	}
+	return "lcloud FTP ready", nil
 }
 
 func (d *mainDriver) ClientDisconnected(cc ftpserver.ClientContext) {}

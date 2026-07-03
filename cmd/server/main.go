@@ -40,6 +40,10 @@ func main() {
 		log.Fatalf("database: %v", err)
 	}
 
+	if err := volume.PrepareProtocolsColumn(db); err != nil {
+		log.Fatalf("migrate protocols column: %v", err)
+	}
+
 	if err := db.AutoMigrate(
 		&auth.User{},
 		&auth.RefreshToken{},
