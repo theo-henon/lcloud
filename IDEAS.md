@@ -242,6 +242,23 @@ Strategic shifts (new audience, new deployment model) → **VISION.md**, not IDE
 
 ---
 
+### User-scoped tasks
+**Context:** Task system ships with `tasks.owner_id` and server-side list filtering (user → own tasks only; admin → all), but the **Tasks** page feels « global »: no owner label, same copy for every role, global-scope tasks shown as « All volumes ». With multiple `user` accounts on one instance, admins cannot tell who scheduled what; users may think they see everyone's jobs.
+**Value:** Clear per-user automation: each member manages their own scheduled jobs on their volumes; the instance admin sees the full picture with owner attribution (same mental model as volumes + monitoring).
+**Estimated effort:** Small (mostly UI + `owner_email` on admin API responses; core ACL already in `internal/task/`)
+**Dependencies:** Task system (shipped); user accounts + user-owned volumes (in progress)
+**Date:** 2026-07-03
+
+**Product decisions:**
+| Role | See tasks | Create volume-scoped | Create global-scoped |
+|---|---|---|---|
+| `user` | Own only | On own volumes | **No** |
+| `admin` | All (+ owner email) | Any volume | Yes (maintenance macros) |
+
+**Spec:** [docs/features/user-scoped-tasks/SPEC.md](docs/features/user-scoped-tasks/SPEC.md) — shipped on `feature/user-management-ui`.
+
+---
+
 ### Volume file explorer UX redesign
 **Context:** MVP ships a functional but minimal file browser on `/volumes/:id` — flat table (`FileBrowser`), breadcrumb only, a permanent drag-and-drop upload banner above the list, and an always-visible "New folder" text field + button. Operator feedback (post-MVP): the layout does not resemble any familiar product; upload and folder creation **pollute** the main area instead of living in standard controls; files cannot be dropped **onto** the file list itself. Navigation is click-folder-name-in-table only — no sidebar tree, view switcher, or inline rename. FTP/WebDAV are separate ideas; the web UI should feel like a known cloud drive on day one.
 **Value:** Reuse interaction patterns from **OneDrive, Google Drive, Dropbox**, plus desktop habits (Windows Explorer inline rename): users already know where upload, "New folder", views, and rename live — no learning curve for a custom lcloud layout.

@@ -66,9 +66,10 @@ type PatchTaskInput struct {
 
 type TaskView struct {
 	Task
-	VolumeName          string  `json:"volume_name,omitempty"`
-	ScheduleDescription string  `json:"schedule_description"`
-	LastRunStatus       string  `json:"last_run_status,omitempty"`
+	OwnerEmail          string `json:"owner_email,omitempty"`
+	VolumeName          string `json:"volume_name,omitempty"`
+	ScheduleDescription string `json:"schedule_description"`
+	LastRunStatus       string `json:"last_run_status,omitempty"`
 }
 
 func (s *Service) Create(ctx context.Context, claims *auth.Claims, input CreateTaskInput) (*TaskView, error) {
@@ -143,6 +144,21 @@ func (s *Service) List(claims *auth.Claims, volumeID *uuid.UUID) ([]TaskView, er
 		}
 		views = append(views, *view)
 	}
+
+	if claims.Role == auth.RoleAdmin && len(views) > 0 {
+		ownerIDs := make([]uuid.UUID, len(views))
+		for i := range views {
+			ownerIDs[i] = views[i].OwnerID
+		}
+		emails, err := s.ownerEmailsByIDs(ownerIDs)
+		if err != nil {
+			return nil, err
+		}
+		for i := range views {
+			views[i].OwnerEmail = emails[views[i].OwnerID]
+		}
+	}
+
 	return views, nil
 }
 
@@ -154,7 +170,18 @@ func (s *Service) Get(claims *auth.Claims, id uuid.UUID) (*TaskView, error) {
 	if err := s.authorizeTask(claims, task); err != nil {
 		return nil, err
 	}
-	return s.toView(task)
+	view, err := s.toView(task)
+	if err != nil {
+		return nil, err
+	}
+	if claims.Role == auth.RoleAdmin {
+		emails, err := s.ownerEmailsByIDs([]uuid.UUID{task.OwnerID})
+		if err != nil {
+			return nil, err
+		}
+		view.OwnerEmail = emails[task.OwnerID]
+	}
+	return view, nil
 }
 
 func (s *Service) Patch(ctx context.Context, claims *auth.Claims, id uuid.UUID, input PatchTaskInput) (*TaskView, error) {
@@ -504,6 +531,35 @@ func (s *Service) toView(task *Task) (*TaskView, error) {
 		view.LastRunStatus = lastRun.Status
 	}
 	return &view, nil
+}
+
+func (s *Service) ownerEmailsByIDs(ids []uuid.UUID) (map[uuid.UUID]string, error) {
+	if len(ids) == 0 {
+		return map[uuid.UUID]string{}, nil
+	}
+
+	unique := make(map[uuid.UUID]struct{}, len(ids))
+	for _, id := range ids {
+		unique[id] = struct{}{}
+	}
+	deduped := make([]uuid.UUID, 0, len(unique))
+	for id := range unique {
+		deduped = append(deduped, id)
+	}
+
+	var rows []struct {
+		ID    uuid.UUID
+		Email string
+	}
+	if err := s.db.Table("users").Select("id, email").Where("id IN ?", deduped).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	out := make(map[uuid.UUID]string, len(rows))
+	for _, row := range rows {
+		out[row.ID] = row.Email
+	}
+	return out, nil
 }
 
 func (s *Service) ListEnabled() ([]Task, error) {

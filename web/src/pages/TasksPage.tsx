@@ -28,7 +28,14 @@ export function TasksPage() {
   if (tasksQuery.isLoading || volumesQuery.isLoading) {
     return (
       <>
-        <Header title="Tasks" description="Automate recurring file operations on your volumes." />
+        <Header
+          title="Tasks"
+          description={
+            isAdmin
+              ? "Manage scheduled jobs across the instance."
+              : "Automate recurring jobs on your volumes."
+          }
+        />
         <section className="px-8 py-6">
           <p className="text-sm text-muted">Loading tasks...</p>
         </section>
@@ -50,7 +57,11 @@ export function TasksPage() {
     <>
       <Header
         title="Tasks"
-        description="Automate recurring file operations on your volumes."
+        description={
+          isAdmin
+            ? "Manage scheduled jobs across the instance."
+            : "Automate recurring jobs on your volumes."
+        }
       />
 
       <section className="space-y-8 px-8 py-6">
@@ -113,10 +124,11 @@ export function TasksPage() {
 
         <div>
           <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted">
-            Scheduled tasks
+            {isAdmin ? "All scheduled tasks" : "Your scheduled tasks"}
           </h2>
           <TaskList
             tasks={tasksQuery.data.tasks}
+            isAdmin={isAdmin}
             selectedId={selectedId}
             onSelect={setSelectedId}
             onEdit={(task) => {

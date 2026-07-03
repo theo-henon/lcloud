@@ -215,6 +215,7 @@ export type TaskRunStatus = "success" | "failed" | "skipped" | "dry_run";
 export interface TaskRecord {
   id: string;
   owner_id: string;
+  owner_email?: string;
   name: string;
   macro: string;
   scope: TaskScope;
