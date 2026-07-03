@@ -22,7 +22,7 @@ export function TasksPage() {
   const [editing, setEditing] = useState<TaskRecord | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const usersQuery = useAdminUsers();
+  const usersQuery = useAdminUsers(isAdmin);
   const volumesForFormQuery = useVolumes();
   const volumesForFilterQuery = useVolumes(isAdmin && ownerFilter ? ownerFilter : undefined);
   const tasksQuery = useTasks({

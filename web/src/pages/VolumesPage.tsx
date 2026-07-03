@@ -28,7 +28,7 @@ export function VolumesPage() {
   const [error, setError] = useState<string | null>(null);
 
   const disksQuery = useDisks();
-  const usersQuery = useAdminUsers();
+  const usersQuery = useAdminUsers(isAdmin);
   const volumesQuery = useVolumes(isAdmin && ownerFilter ? ownerFilter : undefined);
   const deletionRequestsQuery = useVolumeDeletionRequests(isAdmin);
   const createVolume = useCreateVolume();

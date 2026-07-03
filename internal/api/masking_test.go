@@ -344,3 +344,138 @@ func TestDiskMasking_PatchResponseIsMasked(t *testing.T) {
 	require.Empty(t, patched.DiskPath)
 	require.Empty(t, patched.RootPath)
 }
+
+func TestVolumeDeletionRequestOwnerCanRequest(t *testing.T) {
+	router, service, volumeService, diskPath := setupTestRouter(t)
+
+	user, err := service.CreateUser("owner@example.com", "password123", auth.RoleUser)
+	require.NoError(t, err)
+
+	vol, err := volumeService.Create(
+		&auth.Claims{UserID: user.ID, Role: auth.RoleUser},
+		volume.CreateVolumeInput{Name: "Photos", DiskPath: diskPath},
+	)
+	require.NoError(t, err)
+
+	login, err := service.Login("owner@example.com", "password123")
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/volumes/"+vol.ID.String()+"/deletion-request", nil)
+	req.Header.Set("Authorization", "Bearer "+login.AccessToken)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusCreated, rec.Code)
+
+	var body struct {
+		Status string `json:"status"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.Equal(t, "pending", body.Status)
+}
+
+func TestVolumeDeletionRequestForbiddenForNonOwner(t *testing.T) {
+	router, service, volumeService, diskPath := setupTestRouter(t)
+
+	owner, err := service.CreateUser("owner@example.com", "password123", auth.RoleUser)
+	require.NoError(t, err)
+	_, err = service.CreateUser("other@example.com", "password123", auth.RoleUser)
+	require.NoError(t, err)
+
+	vol, err := volumeService.Create(
+		&auth.Claims{UserID: owner.ID, Role: auth.RoleUser},
+		volume.CreateVolumeInput{Name: "Photos", DiskPath: diskPath},
+	)
+	require.NoError(t, err)
+
+	otherLogin, err := service.Login("other@example.com", "password123")
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/volumes/"+vol.ID.String()+"/deletion-request", nil)
+	req.Header.Set("Authorization", "Bearer "+otherLogin.AccessToken)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusForbidden, rec.Code)
+}
+
+func TestVolumeDeletionRequestAdminListAndDismiss(t *testing.T) {
+	router, service, volumeService, diskPath := setupTestRouter(t)
+
+	user, err := service.CreateUser("owner@example.com", "password123", auth.RoleUser)
+	require.NoError(t, err)
+
+	vol, err := volumeService.Create(
+		&auth.Claims{UserID: user.ID, Role: auth.RoleUser},
+		volume.CreateVolumeInput{Name: "Photos", DiskPath: diskPath},
+	)
+	require.NoError(t, err)
+
+	userLogin, err := service.Login("owner@example.com", "password123")
+	require.NoError(t, err)
+
+	requestReq := httptest.NewRequest(http.MethodPost, "/api/volumes/"+vol.ID.String()+"/deletion-request", nil)
+	requestReq.Header.Set("Authorization", "Bearer "+userLogin.AccessToken)
+	requestRec := httptest.NewRecorder()
+	router.ServeHTTP(requestRec, requestReq)
+	require.Equal(t, http.StatusCreated, requestRec.Code)
+
+	adminLogin, err := service.Login("admin@example.com", "adminpass1")
+	require.NoError(t, err)
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/admin/volume-deletion-requests", nil)
+	listReq.Header.Set("Authorization", "Bearer "+adminLogin.AccessToken)
+	listRec := httptest.NewRecorder()
+	router.ServeHTTP(listRec, listReq)
+	require.Equal(t, http.StatusOK, listRec.Code)
+
+	var listResp struct {
+		Requests []struct {
+			ID         string `json:"id"`
+			VolumeID   string `json:"volume_id"`
+			VolumeName string `json:"volume_name"`
+			UserEmail  string `json:"user_email"`
+		} `json:"requests"`
+	}
+	require.NoError(t, json.Unmarshal(listRec.Body.Bytes(), &listResp))
+	require.Len(t, listResp.Requests, 1)
+	require.Equal(t, vol.ID.String(), listResp.Requests[0].VolumeID)
+	require.Equal(t, "Photos", listResp.Requests[0].VolumeName)
+	require.Equal(t, "owner@example.com", listResp.Requests[0].UserEmail)
+
+	dismissReq := httptest.NewRequest(
+		http.MethodDelete,
+		"/api/admin/volume-deletion-requests/"+listResp.Requests[0].ID,
+		nil,
+	)
+	dismissReq.Header.Set("Authorization", "Bearer "+adminLogin.AccessToken)
+	dismissRec := httptest.NewRecorder()
+	router.ServeHTTP(dismissRec, dismissReq)
+	require.Equal(t, http.StatusNoContent, dismissRec.Code)
+
+	listAfterReq := httptest.NewRequest(http.MethodGet, "/api/admin/volume-deletion-requests", nil)
+	listAfterReq.Header.Set("Authorization", "Bearer "+adminLogin.AccessToken)
+	listAfterRec := httptest.NewRecorder()
+	router.ServeHTTP(listAfterRec, listAfterReq)
+	require.Equal(t, http.StatusOK, listAfterRec.Code)
+
+	var listAfterResp struct {
+		Requests []any `json:"requests"`
+	}
+	require.NoError(t, json.Unmarshal(listAfterRec.Body.Bytes(), &listAfterResp))
+	require.Empty(t, listAfterResp.Requests)
+}
+
+func TestVolumeDeletionRequestNonAdminCannotList(t *testing.T) {
+	router, service, _, _ := setupTestRouter(t)
+
+	_, err := service.CreateUser("user@example.com", "password123", auth.RoleUser)
+	require.NoError(t, err)
+
+	login, err := service.Login("user@example.com", "password123")
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/volume-deletion-requests", nil)
+	req.Header.Set("Authorization", "Bearer "+login.AccessToken)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusForbidden, rec.Code)
+}

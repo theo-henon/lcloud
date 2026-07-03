@@ -2,10 +2,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CreateAdminUserInput, PatchAdminUserInput } from "@/lib/api";
 import { api } from "@/lib/api";
 
-export function useAdminUsers() {
+export function useAdminUsers(enabled = true) {
   return useQuery({
     queryKey: ["admin", "users"],
     queryFn: () => api.listAdminUsers(),
+    enabled,
     staleTime: 15_000,
   });
 }
