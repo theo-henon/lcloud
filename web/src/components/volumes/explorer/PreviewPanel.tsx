@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import type { FileEntry } from "@/lib/api";
+import { ActionIcon } from "@/lib/icons";
 
 type PreviewPanelProps = {
   entry: FileEntry;
@@ -26,11 +27,12 @@ export function PreviewPanel({ entry, volumeId, content, onClose }: PreviewPanel
                   void api.downloadFile(volumeId, entry.path, entry.name);
                 }}
               >
+                <ActionIcon action="download" className="mr-2" />
                 Download
               </Button>
             ) : null}
-            <Button variant="ghost" onClick={onClose}>
-              Close
+            <Button variant="ghost" className="h-9 w-9 px-0" onClick={onClose} aria-label="Close">
+              <ActionIcon action="close" />
             </Button>
           </div>
         </div>

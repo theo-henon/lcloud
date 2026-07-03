@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Trash2,
   Upload,
+  X,
   type LucideIcon,
 } from "lucide-react";
 
@@ -27,6 +28,7 @@ export type ActionIconKey =
   | "create"
   | "logout"
   | "open"
+  | "close"
   | "listView"
   | "gridView"
   | "columns";
@@ -43,6 +45,7 @@ export const actionIcons: Record<ActionIconKey, LucideIcon> = {
   create: Plus,
   logout: LogOut,
   open: FolderOpen,
+  close: X,
   listView: List,
   gridView: Grid3X3,
   columns: Columns3,
