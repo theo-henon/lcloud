@@ -4,6 +4,7 @@ import { TaskRunStatusBadge } from "@/components/tasks/TaskRunStatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useDeleteTask, useRunTask, useUpdateTask } from "@/hooks/useTasks";
+import { ActionIcon, navIcons } from "@/lib/icons";
 
 type TaskListProps = {
   tasks: TaskRecord[];
@@ -47,9 +48,11 @@ export function TaskList({ tasks, selectedId, onSelect, onEdit }: TaskListProps)
   const deleteTask = useDeleteTask();
 
   if (tasks.length === 0) {
+    const EmptyIcon = navIcons["/tasks"];
     return (
-      <Card className="p-6 text-sm text-muted">
-        No tasks yet — create one to automate volume maintenance.
+      <Card className="flex flex-col items-center gap-3 p-8 text-center text-sm text-muted">
+        {EmptyIcon ? <EmptyIcon className="h-8 w-8 text-muted" aria-hidden /> : null}
+        <p>No tasks yet — create one to automate volume maintenance.</p>
       </Card>
     );
   }
@@ -100,14 +103,16 @@ export function TaskList({ tasks, selectedId, onSelect, onEdit }: TaskListProps)
                   runTask.mutate({ id: task.id, dryRun });
                 }}
               >
+                <ActionIcon action="run" className="mr-1" />
                 Run now
               </Button>
               <Button variant="outline" className="h-8 px-3 text-xs" onClick={() => onEdit(task)}>
+                <ActionIcon action="edit" className="mr-1" />
                 Edit
               </Button>
               <Button
                 variant="outline"
-                className="h-8 px-3 text-xs"
+                className="h-8 px-3 text-xs text-accent-rose hover:text-accent-rose"
                 disabled={deleteTask.isPending}
                 onClick={() => {
                   if (window.confirm("Delete this task?")) {
@@ -115,6 +120,7 @@ export function TaskList({ tasks, selectedId, onSelect, onEdit }: TaskListProps)
                   }
                 }}
               >
+                <ActionIcon action="delete" className="mr-1" />
                 Delete
               </Button>
             </div>

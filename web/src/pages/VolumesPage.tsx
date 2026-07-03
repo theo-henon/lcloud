@@ -11,6 +11,7 @@ import {
   usePatchVolume,
   useVolumes,
 } from "@/hooks/useVolumes";
+import { ActionIcon, navIcons } from "@/lib/icons";
 import { ApiError } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 
@@ -36,6 +37,7 @@ export function VolumesPage() {
         action={
           user?.role === "admin" ? (
             <Button onClick={() => setShowCreate(true)} disabled={disks.length === 0}>
+              <ActionIcon action="create" className="mr-2" />
               Create volume
             </Button>
           ) : undefined
@@ -70,8 +72,14 @@ export function VolumesPage() {
         {volumesQuery.isLoading ? (
           <p className="text-sm text-muted">Loading volumes...</p>
         ) : volumes.length === 0 ? (
-          <Card className="p-6 text-sm text-body">
-            No volumes yet. Create one to start storing files.
+          <Card className="flex flex-col items-center gap-3 p-8 text-center text-sm text-body">
+            {(() => {
+              const EmptyIcon = navIcons["/volumes"];
+              return EmptyIcon ? (
+                <EmptyIcon className="h-8 w-8 text-muted" aria-hidden />
+              ) : null;
+            })()}
+            <p>No volumes yet. Create one to start storing files.</p>
           </Card>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

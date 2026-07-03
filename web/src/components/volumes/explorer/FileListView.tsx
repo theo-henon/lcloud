@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { File, Folder } from "lucide-react";
 import { ContextMenuItem } from "@/components/ui/context-menu";
 import { ThumbnailPreview } from "@/components/volumes/ThumbnailPreview";
 import { InlineRename } from "@/components/volumes/explorer/InlineRename";
@@ -9,6 +8,7 @@ import { ListColumnHeader } from "@/components/volumes/explorer/ListColumnHeader
 import type { ColumnId, ListColumnPref } from "@/hooks/useExplorerPrefs";
 import { visibleListColumns } from "@/hooks/useExplorerPrefs";
 import type { FileEntry } from "@/lib/api";
+import { actionIcons, ContextMenuAction, getFileIcon } from "@/lib/icons";
 import { cn, formatBytes } from "@/lib/utils";
 
 type FileListViewProps = {
@@ -105,13 +105,23 @@ function RowContextMenu({
           style={{ top: menu.y, left: menu.x }}
           onMouseLeave={() => setMenu(null)}
         >
-          <ContextMenuItem onSelect={() => { onOpenEntry(entry); setMenu(null); }}>Open</ContextMenuItem>
+          <ContextMenuItem onSelect={() => { onOpenEntry(entry); setMenu(null); }}>
+            <ContextMenuAction action="open">Open</ContextMenuAction>
+          </ContextMenuItem>
           {entry.type === "file" ? (
-            <ContextMenuItem onSelect={() => { onDownload(entry); setMenu(null); }}>Download</ContextMenuItem>
+            <ContextMenuItem onSelect={() => { onDownload(entry); setMenu(null); }}>
+              <ContextMenuAction action="download">Download</ContextMenuAction>
+            </ContextMenuItem>
           ) : null}
-          <ContextMenuItem onSelect={() => { onRenameRequest(entry); setMenu(null); }}>Rename</ContextMenuItem>
+          <ContextMenuItem onSelect={() => { onRenameRequest(entry); setMenu(null); }}>
+            <ContextMenuAction action="rename">Rename</ContextMenuAction>
+          </ContextMenuItem>
           {entry.type === "file" ? (
-            <ContextMenuItem onSelect={() => { onDelete(entry); setMenu(null); }}>Delete</ContextMenuItem>
+            <ContextMenuItem onSelect={() => { onDelete(entry); setMenu(null); }}>
+              <ContextMenuAction action="delete" destructive>
+                Delete
+              </ContextMenuAction>
+            </ContextMenuItem>
           ) : null}
         </div>
       ) : null}
@@ -142,9 +152,18 @@ function renderCell(
           <div className="flex min-w-0 items-center gap-3">
             {entry.type === "file" && entry.has_thumbnail ? (
               <ThumbnailPreview volumeId={volumeId} path={entry.path} />
-            ) : entry.type === "directory" ? (
-              <Folder className="h-5 w-5 shrink-0 text-primary" />
-            ) : null}
+            ) : (() => {
+              const EntryIcon = getFileIcon(entry);
+              return (
+                <EntryIcon
+                  className={cn(
+                    "h-5 w-5 shrink-0",
+                    entry.type === "directory" ? "text-primary" : "text-muted",
+                  )}
+                  aria-hidden
+                />
+              );
+            })()}
             {entry.type === "directory" ? (
               <button
                 type="button"
@@ -190,9 +209,11 @@ export function FileListView(props: FileListViewProps) {
   const columns = visibleListColumns(listColumns);
 
   if (entries.length === 0) {
+    const EmptyIcon = actionIcons.open;
     return (
-      <div className="rounded-lg border border-hairline bg-surface-card p-6 text-sm text-muted">
-        This folder is empty. Drop files here or create a subfolder.
+      <div className="flex flex-col items-center gap-3 rounded-lg border border-hairline bg-surface-card p-8 text-center text-sm text-muted">
+        <EmptyIcon className="h-8 w-8 text-muted" aria-hidden />
+        <p>This folder is empty. Drop files here or create a subfolder.</p>
       </div>
     );
   }

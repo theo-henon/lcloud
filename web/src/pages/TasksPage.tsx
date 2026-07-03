@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useCreateTask, useTaskRuns, useTasks, useUpdateTask } from "@/hooks/useTasks";
 import { useVolumes } from "@/hooks/useVolumes";
+import { ActionIcon } from "@/lib/icons";
 import { useAuthStore } from "@/store/auth";
 
 export function TasksPage() {
@@ -75,6 +76,7 @@ export function TasksPage() {
               setShowForm(true);
             }}
           >
+            <ActionIcon action="create" className="mr-2" />
             Create task
           </Button>
         </div>
