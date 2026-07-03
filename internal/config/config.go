@@ -27,6 +27,7 @@ type Config struct {
 	FTPPasvMin             int
 	FTPPasvMax             int
 	FTPPasvAddress         string
+	TrashRetentionDays     int
 }
 
 func Load() (*Config, error) {
@@ -48,6 +49,7 @@ func Load() (*Config, error) {
 		FTPPasvMin:             getEnvInt("FTP_PASV_MIN", 30000),
 		FTPPasvMax:             getEnvInt("FTP_PASV_MAX", 30010),
 		FTPPasvAddress:         getEnv("FTP_PASV_ADDRESS", "127.0.0.1"),
+		TrashRetentionDays:     getEnvInt("LCLOUD_TRASH_RETENTION_DAYS", 30),
 	}
 
 	if cfg.DatabaseURL == "" {

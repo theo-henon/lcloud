@@ -11,6 +11,8 @@ import (
 const (
 	EventFileUploaded   = "file.uploaded"
 	EventFileDeleted    = "file.deleted"
+	EventFileTrashed    = "file.trashed"
+	EventFileRestored   = "file.restored"
 	EventFileMoved      = "file.moved"
 	EventFileRenamed    = "file.renamed"
 	EventVolumeCreated  = "volume.created"
@@ -62,6 +64,25 @@ func FromFileDeleted(e volume.FileDeletedEvent) Event {
 	return newEvent(EventFileDeleted, e.VolumeID.String(), map[string]any{
 		"volume_id":     e.VolumeID.String(),
 		"relative_path": e.RelativePath,
+		"size_bytes":    e.SizeBytes,
+	})
+}
+
+func FromFileTrashed(e volume.FileTrashedEvent) Event {
+	return newEvent(EventFileTrashed, e.VolumeID.String(), map[string]any{
+		"volume_id":     e.VolumeID.String(),
+		"file_id":       e.FileID,
+		"original_path": e.OriginalPath,
+		"size_bytes":    e.SizeBytes,
+		"deleted_at":    e.DeletedAt,
+	})
+}
+
+func FromFileRestored(e volume.FileRestoredEvent) Event {
+	return newEvent(EventFileRestored, e.VolumeID.String(), map[string]any{
+		"volume_id":     e.VolumeID.String(),
+		"file_id":       e.FileID,
+		"restored_path": e.RestoredPath,
 		"size_bytes":    e.SizeBytes,
 	})
 }

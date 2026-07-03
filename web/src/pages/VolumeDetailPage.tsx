@@ -13,9 +13,13 @@ export function VolumeDetailPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialPath = searchParams.get("path") ?? ".";
+  const isTrashView = searchParams.get("view") === "trash";
   const [currentPath, setCurrentPath] = useState(initialPath);
 
   useEffect(() => {
+    if (searchParams.get("view") === "trash") {
+      return;
+    }
     setCurrentPath(searchParams.get("path") ?? ".");
   }, [searchParams]);
 
@@ -30,6 +34,13 @@ export function VolumeDetailPage() {
     }
     const query = normalized === "." ? "" : `?path=${encodeURIComponent(normalized)}`;
     navigate(`/volumes/${id}${query}`, { replace: true });
+  };
+
+  const handleTrashSelect = () => {
+    if (!id) {
+      return;
+    }
+    navigate(`/volumes/${id}?view=trash`, { replace: true });
   };
 
   if (volumeQuery.isLoading) {
@@ -67,7 +78,13 @@ export function VolumeDetailPage() {
       />
 
       <section className="px-8 py-6">
-        <VolumeExplorer volumeId={id} currentPath={currentPath} onPathChange={handlePathChange} />
+        <VolumeExplorer
+          volumeId={id}
+          currentPath={currentPath}
+          onPathChange={handlePathChange}
+          isTrashView={isTrashView}
+          onTrashSelect={handleTrashSelect}
+        />
         <ProtocolSettingsPanel volumeId={id} />
       </section>
     </>

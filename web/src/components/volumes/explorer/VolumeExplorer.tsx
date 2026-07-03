@@ -16,6 +16,7 @@ import { FileListView } from "@/components/volumes/explorer/FileListView";
 import { FolderTree } from "@/components/volumes/explorer/FolderTree";
 import { PreviewPanel } from "@/components/volumes/explorer/PreviewPanel";
 import { UploadQueue } from "@/components/volumes/explorer/UploadQueue";
+import { TrashView } from "@/components/volumes/trash/TrashView";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -42,6 +43,9 @@ type VolumeExplorerProps = {
   volumeId: string;
   currentPath: string;
   onPathChange: (path: string) => void;
+  isTrashView?: boolean;
+  onTrashSelect?: () => void;
+  trashRetentionDays?: number;
 };
 
 function ContentsDropZone({
@@ -86,7 +90,14 @@ function ContentsDropZone({
   );
 }
 
-export function VolumeExplorer({ volumeId, currentPath, onPathChange }: VolumeExplorerProps) {
+export function VolumeExplorer({
+  volumeId,
+  currentPath,
+  onPathChange,
+  isTrashView = false,
+  onTrashSelect,
+  trashRetentionDays = 30,
+}: VolumeExplorerProps) {
   const accessToken = useAuthStore((state) => state.accessToken);
   const queryClient = useQueryClient();
   const { prefs, setPrefs } = useExplorerPrefs();
@@ -212,28 +223,38 @@ export function VolumeExplorer({ volumeId, currentPath, onPathChange }: VolumeEx
       <div className="flex min-h-[560px] overflow-hidden rounded-lg border border-hairline bg-surface-card">
         <FolderTree
           volumeId={volumeId}
-          selectedPath={currentPath}
+          selectedPath={isTrashView ? "" : currentPath}
           onSelect={onPathChange}
           width={prefs.treeWidth}
+          trashSelected={isTrashView}
+          onSelectTrash={onTrashSelect}
         />
         <div className="flex min-w-0 flex-1 flex-col">
-          <ExplorerToolbar
-            prefs={prefs}
-            onViewModeChange={(viewMode) => setPrefs((prev) => ({ ...prev, viewMode }))}
-            onNewFolder={() => setShowNewFolder(true)}
-            onUpload={(files) => enqueueFiles(files, currentPath)}
-          />
+          {!isTrashView ? (
+            <ExplorerToolbar
+              prefs={prefs}
+              onViewModeChange={(viewMode) => setPrefs((prev) => ({ ...prev, viewMode }))}
+              onNewFolder={() => setShowNewFolder(true)}
+              onUpload={(files) => enqueueFiles(files, currentPath)}
+            />
+          ) : null}
 
           <div className="space-y-4 p-4">
-            <BreadcrumbNav
-              volumeId={volumeId}
-              path={currentPath}
-              onNavigate={(path) => onPathChange(path || ".")}
-            />
+            {isTrashView ? (
+              <p className="text-sm font-medium text-body-strong">Trash</p>
+            ) : (
+              <BreadcrumbNav
+                volumeId={volumeId}
+                path={currentPath}
+                onNavigate={(path) => onPathChange(path || ".")}
+              />
+            )}
 
-            <UploadQueue items={items} onDismiss={dismissItem} onCancel={cancelQueued} />
+            {!isTrashView ? (
+              <UploadQueue items={items} onDismiss={dismissItem} onCancel={cancelQueued} />
+            ) : null}
 
-            {moveError ? (
+            {!isTrashView && moveError ? (
               <div className="flex items-start justify-between gap-3 rounded-lg border border-accent-rose/40 bg-surface-soft px-4 py-3 text-sm">
                 <p className="text-accent-rose">{moveError}</p>
                 <Button variant="ghost" onClick={() => setMoveError(null)}>
@@ -242,7 +263,7 @@ export function VolumeExplorer({ volumeId, currentPath, onPathChange }: VolumeEx
               </div>
             ) : null}
 
-            {showNewFolder ? (
+            {!isTrashView && showNewFolder ? (
               <Card className="flex flex-wrap items-end gap-3 p-4">
                 <div className="min-w-[220px] flex-1 space-y-2">
                   <label className="text-sm font-medium text-body-strong" htmlFor="new-folder-name">
@@ -273,11 +294,21 @@ export function VolumeExplorer({ volumeId, currentPath, onPathChange }: VolumeEx
               </Card>
             ) : null}
 
+            {isTrashView ? (
+              <TrashView volumeId={volumeId} retentionDays={trashRetentionDays} />
+            ) : (
             <ContentsDropZone
               currentPath={currentPath}
               onExternalDrop={(files, targetPath) => enqueueFiles(files, targetPath)}
             >
-              {filesQuery.isLoading ? (
+              {filesQuery.isError ? (
+                <Card className="border-accent-rose/40 p-6 text-sm text-accent-rose">
+                  Unable to load files. Check that the server is running.
+                  <Button variant="outline" className="mt-3" onClick={() => void filesQuery.refetch()}>
+                    Retry
+                  </Button>
+                </Card>
+              ) : filesQuery.isLoading ? (
                 <p className="text-sm text-muted">Loading files…</p>
               ) : prefs.viewMode === "grid" ? (
                 <FileGridView
@@ -288,7 +319,7 @@ export function VolumeExplorer({ volumeId, currentPath, onPathChange }: VolumeEx
                   onOpenEntry={(entry) => void handleOpenEntry(entry)}
                   onDownload={(entry) => void api.downloadFile(volumeId, entry.path, entry.name)}
                   onDelete={(entry) => {
-                    if (window.confirm("Delete this file?")) {
+                    if (window.confirm("Move to trash?")) {
                       void deleteFile.mutateAsync(entry.path);
                     }
                   }}
@@ -308,7 +339,7 @@ export function VolumeExplorer({ volumeId, currentPath, onPathChange }: VolumeEx
                   onOpenEntry={(entry) => void handleOpenEntry(entry)}
                   onDownload={(entry) => void api.downloadFile(volumeId, entry.path, entry.name)}
                   onDelete={(entry) => {
-                    if (window.confirm("Delete this file?")) {
+                    if (window.confirm("Move to trash?")) {
                       void deleteFile.mutateAsync(entry.path);
                     }
                   }}
@@ -318,6 +349,7 @@ export function VolumeExplorer({ volumeId, currentPath, onPathChange }: VolumeEx
                 />
               )}
             </ContentsDropZone>
+            )}
           </div>
         </div>
       </div>

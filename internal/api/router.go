@@ -228,6 +228,7 @@ type RouterConfig struct {
 	DiskRegistry      *volume.DiskRegistry
 	VolumeService     *volume.Service
 	FileService       *volume.FileService
+	TrashService      *volume.TrashService
 	MonitoringService *monitoring.Service
 	SettingsService   *settings.Service
 	DashboardService  *dashboard.Service
@@ -258,6 +259,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	diskHandler := NewDiskHandler(cfg.DiskRegistry, cfg.SettingsService)
 	volumeHandler := NewVolumeHandler(cfg.VolumeService, cfg.SettingsService, cfg.AuthService)
 	fileHandler := NewFileHandler(cfg.FileService)
+	trashHandler := NewTrashHandler(cfg.TrashService)
 	monitoringHandler := NewMonitoringHandler(cfg.MonitoringService)
 	searchHandler := NewSearchHandler(cfg.VolumeService, cfg.IndexManager)
 	settingsHandler := NewSettingsHandler(cfg.SettingsService, cfg.MaxUploadBytes)
@@ -319,6 +321,11 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			protected.PATCH("/volumes/:id/files/rename", fileHandler.Rename)
 			protected.DELETE("/volumes/:id/files", fileHandler.Delete)
 			protected.GET("/volumes/:id/search", searchHandler.Search)
+
+			protected.GET("/volumes/:id/trash", trashHandler.List)
+			protected.POST("/volumes/:id/trash/:fileId/restore", trashHandler.Restore)
+			protected.DELETE("/volumes/:id/trash/:fileId", trashHandler.PurgeOne)
+			protected.DELETE("/volumes/:id/trash", trashHandler.Empty)
 
 			protected.GET("/monitoring/overview", monitoringHandler.Overview)
 			protected.GET("/monitoring/volumes/:id/stats", monitoringHandler.VolumeStats)

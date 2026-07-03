@@ -97,7 +97,11 @@ Each volume is a self-describing directory. Structure created at volume creation
 │   └── metadata/             ← file metadata cache (computed, can be rebuilt)
 ├── plugins/
 │   └── <plugin-id>/          ← isolated per-plugin persistent data per volume
-└── logs/                     ← planned structure; populated post-MVP
+├── logs/                     ← planned structure; populated post-MVP
+└── .trash/                   ← soft-deleted files (portable; see ADR-005)
+    └── {file-id}/
+        ├── {basename}        ← original file bytes
+        └── meta.json         ← trash metadata (original_path, deleted_at, …)
 ```
 
 **Portability rule:** lcloud can re-import any volume by pointing to its root directory and reading `.volume.json`. PostgreSQL is a performance cache, not the source of truth for volume config. Any write to volume config must update `.volume.json` first.

@@ -23,4 +23,6 @@ var (
 	ErrForbidden                 = errors.New("forbidden")
 	ErrDeletionRequestExists     = errors.New("deletion request already pending")
 	ErrDeletionRequestNotFound   = errors.New("deletion request not found")
+	ErrTrashItemNotFound         = errors.New("trash item not found")
+	ErrPathOccupied              = errors.New("path occupied")
 )

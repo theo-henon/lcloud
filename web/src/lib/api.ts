@@ -90,6 +90,22 @@ export interface DirectoryListing {
   entries: FileEntry[];
 }
 
+export interface TrashEntry {
+  id: string;
+  name: string;
+  original_path: string;
+  mime_type?: string;
+  size_bytes: number;
+  deleted_at: string;
+  modified_at?: string;
+  has_thumbnail?: boolean;
+}
+
+export interface TrashListing {
+  items: TrashEntry[];
+  total: number;
+}
+
 export interface CreateVolumeInput {
   name: string;
   disk_path?: string;
@@ -549,6 +565,28 @@ export const api = {
   fileThumbnailUrl(volumeId: string, path: string) {
     const params = new URLSearchParams({ path });
     return `/api/volumes/${volumeId}/files/thumbnail?${params}`;
+  },
+  trashThumbnailUrl(volumeId: string, fileId: string) {
+    const params = new URLSearchParams({ id: fileId });
+    return `/api/volumes/${volumeId}/files/thumbnail?${params}`;
+  },
+  listTrash(volumeId: string, limit = 50, offset = 0) {
+    const params = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+    });
+    return apiRequest<TrashListing>(`/api/volumes/${volumeId}/trash?${params}`);
+  },
+  restoreTrashItem(volumeId: string, fileId: string) {
+    return apiRequest<FileEntry>(`/api/volumes/${volumeId}/trash/${fileId}/restore`, {
+      method: "POST",
+    });
+  },
+  purgeTrashItem(volumeId: string, fileId: string) {
+    return apiRequest<void>(`/api/volumes/${volumeId}/trash/${fileId}`, { method: "DELETE" });
+  },
+  emptyTrash(volumeId: string) {
+    return apiRequest<{ purged: number }>(`/api/volumes/${volumeId}/trash`, { method: "DELETE" });
   },
   deleteFile(volumeId: string, path: string) {
     const params = new URLSearchParams({ path });

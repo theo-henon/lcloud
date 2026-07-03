@@ -77,7 +77,7 @@ Admin-only. Limited to `rebuild_index`, `compute_stats`, `alert_usage` — itera
 
 | Category | Macros |
 |---|---|
-| Cleanup | `delete_old_files`, `delete_large_files`, `clear_cache` |
+| Cleanup | `delete_old_files`, `delete_large_files`, `clear_cache`, `purge_trash` |
 | Organization | `move_files`, `sort_by_type`, `sort_by_date` |
 | Maintenance | `rebuild_index`, `compute_stats` |
 | Alerts | `alert_usage` |

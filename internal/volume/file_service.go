@@ -446,47 +446,21 @@ func (s *FileService) Delete(claims *auth.Claims, volumeID uuid.UUID, relPath st
 	if err != nil {
 		return err
 	}
+	return TrashFileInternal(context.Background(), s.trashOpDeps(), vol, relPath)
+}
 
-	absPath, err := s.paths.ResolveUserdata(vol.RootPath, relPath)
+func (s *FileService) OpenThumbnailByID(claims *auth.Claims, volumeID uuid.UUID, fileID string) (*os.File, error) {
+	vol, err := s.volumes.Get(claims, volumeID)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	info, err := os.Stat(absPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return ErrFileNotFound
-		}
-		return err
+	if err := validateTrashFileID(fileID); err != nil {
+		return nil, err
 	}
-	if info.IsDir() {
-		return ErrNotDirectory
+	if _, err := os.Stat(s.thumbnails.ThumbnailPath(vol.RootPath, fileID)); os.IsNotExist(err) {
+		return nil, ErrFileNotFound
 	}
-
-	record, metaErr := s.metadata.ReadByRelativePath(vol.RootPath, filepath.ToSlash(cleanRelativePath(relPath)))
-	if metaErr == nil {
-		_ = s.thumbnails.Delete(vol.RootPath, record.ID)
-		_ = s.metadata.Delete(vol.RootPath, record.ID)
-		if idx, err := s.indexManager.Get(vol.RootPath); err == nil {
-			_ = idx.Delete(record.RelativePath)
-		}
-	}
-
-	if err := os.Remove(absPath); err != nil {
-		return err
-	}
-	if err := s.volumes.syncUsage(vol, vol.UsedBytes-info.Size()); err != nil {
-		return err
-	}
-	s.invalidateStats(vol.RootPath)
-	if s.events != nil {
-		size := info.Size()
-		s.events.FileDeleted(context.Background(), FileDeletedEvent{
-			VolumeID:     vol.ID,
-			RelativePath: filepath.ToSlash(cleanRelativePath(relPath)),
-			SizeBytes:    size,
-		})
-	}
-	return nil
+	return s.thumbnails.Open(vol.RootPath, fileID)
 }
 
 func detectMime(path, filename string) string {

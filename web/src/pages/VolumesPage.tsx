@@ -94,7 +94,14 @@ export function VolumesPage() {
           </Card>
         ) : null}
 
-        {volumesQuery.isLoading ? (
+        {volumesQuery.isError ? (
+          <Card className="border-accent-rose/40 p-6 text-sm text-accent-rose">
+            Unable to load volumes. Check that the server is running.
+            <Button variant="outline" className="mt-3" onClick={() => void volumesQuery.refetch()}>
+              Retry
+            </Button>
+          </Card>
+        ) : volumesQuery.isLoading ? (
           <p className="text-sm text-muted">Loading volumes...</p>
         ) : volumes.length === 0 ? (
           <Card className="flex flex-col items-center gap-3 p-8 text-center text-sm text-body">
