@@ -40,6 +40,7 @@ type cachedVolumeStats struct {
 type VolumeSummary struct {
 	ID              string     `json:"id"`
 	Name            string     `json:"name"`
+	OwnerEmail      string     `json:"owner_email,omitempty"`
 	DiskPath        string     `json:"disk_path"`
 	QuotaBytes      int64      `json:"quota_bytes"`
 	UsedBytes       int64      `json:"used_bytes"`

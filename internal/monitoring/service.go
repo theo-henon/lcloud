@@ -65,11 +65,26 @@ func (s *Service) GetOverview(ctx context.Context, claims *auth.Claims) (*Overvi
 		})
 	}
 
+	var ownerEmails map[uuid.UUID]string
+	if claims.Role == auth.RoleAdmin {
+		ownerIDs := make([]uuid.UUID, len(volumes))
+		for i := range volumes {
+			ownerIDs[i] = volumes[i].OwnerID
+		}
+		ownerEmails, err = s.volumes.OwnerEmailsByIDs(ownerIDs)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	summaries := make([]VolumeSummary, 0, len(volumes))
 	for i := range volumes {
 		summary, err := s.volumeSummary(&volumes[i])
 		if err != nil {
 			return nil, err
+		}
+		if ownerEmails != nil {
+			summary.OwnerEmail = ownerEmails[volumes[i].OwnerID]
 		}
 		summaries = append(summaries, *summary)
 	}

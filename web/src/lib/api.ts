@@ -64,6 +64,7 @@ export interface Volume {
   id: string;
   name: string;
   owner_id: string;
+  owner_email?: string;
   disk_path: string;
   root_path: string;
   quota_bytes: number;
@@ -129,6 +130,7 @@ export interface MimeBreakdown {
 export interface VolumeSummary {
   id: string;
   name: string;
+  owner_email?: string;
   disk_path: string;
   quota_bytes: number;
   used_bytes: number;

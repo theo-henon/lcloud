@@ -54,6 +54,20 @@ func (h *VolumeHandler) List(c *gin.Context) {
 		return
 	}
 
+	var emailByOwner map[uuid.UUID]string
+	if claims.Role == auth.RoleAdmin {
+		ownerIDs := make([]uuid.UUID, len(volumes))
+		for i := range volumes {
+			ownerIDs[i] = volumes[i].OwnerID
+		}
+		var err error
+		emailByOwner, err = h.volumes.OwnerEmailsByIDs(ownerIDs)
+		if err != nil {
+			httputil.InternalError(c, "unable to list volumes")
+			return
+		}
+	}
+
 	items := make([]gin.H, len(volumes))
 	for i := range volumes {
 		masked, err := h.maskVolumeIfNeeded(claims, volumes[i])
@@ -61,7 +75,7 @@ func (h *VolumeHandler) List(c *gin.Context) {
 			httputil.InternalError(c, "unable to load settings")
 			return
 		}
-		items[i] = gin.H{
+		item := gin.H{
 			"id":                        masked.ID,
 			"name":                      masked.Name,
 			"owner_id":                  masked.OwnerID,
@@ -74,6 +88,12 @@ func (h *VolumeHandler) List(c *gin.Context) {
 			"updated_at":                masked.UpdatedAt,
 			"deletion_request_pending":  pendingIDs[masked.ID],
 		}
+		if emailByOwner != nil {
+			if email := emailByOwner[masked.OwnerID]; email != "" {
+				item["owner_email"] = email
+			}
+		}
+		items[i] = item
 	}
 	httputil.JSON(c, http.StatusOK, gin.H{"volumes": items})
 }

@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { HardDrive } from "lucide-react";
+import { HardDrive, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +46,14 @@ export function VolumeCard({
         </h3>
         {volume.disk_path ? (
           <p className="mt-1 text-sm text-muted">{volume.disk_path}</p>
+        ) : null}
+        {isAdmin && volume.owner_email ? (
+          <p className="mt-1 flex items-center gap-1.5 text-sm text-muted">
+            <User className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span>
+              Created by <span className="text-body">{volume.owner_email}</span>
+            </span>
+          </p>
         ) : null}
       </div>
 

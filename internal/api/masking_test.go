@@ -203,6 +203,94 @@ func TestDiskMasking_MonitoringOverviewForRegularUser(t *testing.T) {
 	require.True(t, found)
 }
 
+func TestVolumeListIncludesOwnerEmailForAdmin(t *testing.T) {
+	router, service, volumeService, diskPath := setupTestRouter(t)
+
+	member, err := service.CreateUser("creator@example.com", "password123", auth.RoleUser)
+	require.NoError(t, err)
+
+	_, err = volumeService.Create(
+		&auth.Claims{UserID: member.ID, Role: auth.RoleUser},
+		volume.CreateVolumeInput{Name: "Dev", DiskPath: diskPath},
+	)
+	require.NoError(t, err)
+
+	adminLogin, err := service.Login("admin@example.com", "adminpass1")
+	require.NoError(t, err)
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/volumes", nil)
+	listReq.Header.Set("Authorization", "Bearer "+adminLogin.AccessToken)
+	listRec := httptest.NewRecorder()
+	router.ServeHTTP(listRec, listReq)
+	require.Equal(t, http.StatusOK, listRec.Code)
+
+	var resp struct {
+		Volumes []struct {
+			Name       string `json:"name"`
+			OwnerEmail string `json:"owner_email"`
+		} `json:"volumes"`
+	}
+	require.NoError(t, json.Unmarshal(listRec.Body.Bytes(), &resp))
+	require.NotEmpty(t, resp.Volumes)
+	require.Equal(t, "creator@example.com", resp.Volumes[0].OwnerEmail)
+}
+
+func TestVolumeListOmitsOwnerEmailForRegularUser(t *testing.T) {
+	router, service, volumeService, diskPath := setupTestRouter(t)
+
+	member, err := service.CreateUser("creator@example.com", "password123", auth.RoleUser)
+	require.NoError(t, err)
+
+	_, err = volumeService.Create(
+		&auth.Claims{UserID: member.ID, Role: auth.RoleUser},
+		volume.CreateVolumeInput{Name: "Dev", DiskPath: diskPath},
+	)
+	require.NoError(t, err)
+
+	userLogin, err := service.Login("creator@example.com", "password123")
+	require.NoError(t, err)
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/volumes", nil)
+	listReq.Header.Set("Authorization", "Bearer "+userLogin.AccessToken)
+	listRec := httptest.NewRecorder()
+	router.ServeHTTP(listRec, listReq)
+	require.Equal(t, http.StatusOK, listRec.Code)
+
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(listRec.Body.Bytes(), &raw))
+	volumes := raw["volumes"].([]any)
+	item := volumes[0].(map[string]any)
+	_, hasOwnerEmail := item["owner_email"]
+	require.False(t, hasOwnerEmail)
+}
+
+func TestMonitoringOverviewIncludesOwnerEmailForAdmin(t *testing.T) {
+	router, service, volumeService, diskPath := setupTestRouter(t)
+
+	member, err := service.CreateUser("creator@example.com", "password123", auth.RoleUser)
+	require.NoError(t, err)
+
+	_, err = volumeService.Create(
+		&auth.Claims{UserID: member.ID, Role: auth.RoleUser},
+		volume.CreateVolumeInput{Name: "Dev", DiskPath: diskPath},
+	)
+	require.NoError(t, err)
+
+	adminLogin, err := service.Login("admin@example.com", "adminpass1")
+	require.NoError(t, err)
+
+	overviewReq := httptest.NewRequest(http.MethodGet, "/api/monitoring/overview", nil)
+	overviewReq.Header.Set("Authorization", "Bearer "+adminLogin.AccessToken)
+	overviewRec := httptest.NewRecorder()
+	router.ServeHTTP(overviewRec, overviewReq)
+	require.Equal(t, http.StatusOK, overviewRec.Code)
+
+	var overview monitoring.OverviewResponse
+	require.NoError(t, json.Unmarshal(overviewRec.Body.Bytes(), &overview))
+	require.NotEmpty(t, overview.Volumes)
+	require.Equal(t, "creator@example.com", overview.Volumes[0].OwnerEmail)
+}
+
 func TestDiskMasking_PatchResponseIsMasked(t *testing.T) {
 	router, service, volumeService, diskPath := setupTestRouter(t)
 
