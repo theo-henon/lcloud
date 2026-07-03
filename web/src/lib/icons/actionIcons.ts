@@ -1,8 +1,8 @@
 import {
   Columns3,
   Download,
+  Folder,
   FolderOpen,
-  FolderPlus,
   Grid3X3,
   List,
   LogOut,
@@ -18,6 +18,7 @@ import {
 
 export type ActionIconKey =
   | "upload"
+  | "new"
   | "newFolder"
   | "download"
   | "delete"
@@ -35,7 +36,8 @@ export type ActionIconKey =
 
 export const actionIcons: Record<ActionIconKey, LucideIcon> = {
   upload: Upload,
-  newFolder: FolderPlus,
+  new: Plus,
+  newFolder: Folder,
   download: Download,
   delete: Trash2,
   rename: Pencil,

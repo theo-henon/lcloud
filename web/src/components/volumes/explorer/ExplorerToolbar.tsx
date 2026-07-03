@@ -26,12 +26,15 @@ export function ExplorerToolbar({
       <DropdownMenu
         trigger={
           <Button variant="outline">
-            <ActionIcon action="newFolder" className="mr-2" />
+            <ActionIcon action="new" className="mr-2" />
             New
           </Button>
         }
       >
-        <DropdownMenuItem onSelect={onNewFolder}>New folder</DropdownMenuItem>
+        <DropdownMenuItem onSelect={onNewFolder}>
+          <ActionIcon action="newFolder" className="mr-2" />
+          New folder
+        </DropdownMenuItem>
       </DropdownMenu>
 
       <Button variant="outline" onClick={() => inputRef.current?.click()}>
