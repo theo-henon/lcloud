@@ -1,5 +1,4 @@
 import { useCallback } from "react";
-import { Columns3 } from "lucide-react";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { ColumnPickerPanel } from "@/components/volumes/explorer/ListColumnPicker";
 import {
@@ -9,6 +8,7 @@ import {
   visibleListColumns,
 } from "@/hooks/useExplorerPrefs";
 import type { FileEntry } from "@/lib/api";
+import { actionIcons } from "@/lib/icons";
 import { autoFitColumnWidth, clampColumnWidth } from "@/lib/listColumnSizing";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +26,7 @@ export function ListColumnHeader({
   onColumnWidthChange,
 }: ListColumnHeaderProps) {
   const visibleColumns = visibleListColumns(listColumns);
+  const ColumnsIcon = actionIcons.columns;
 
   const startResize = useCallback(
     (columnId: ColumnId, startX: number, startWidth: number) => {
@@ -95,7 +96,7 @@ export function ListColumnHeader({
                 )}
                 aria-label="Choose columns"
               >
-                <Columns3 className="h-4 w-4" />
+                <ColumnsIcon className="h-4 w-4" aria-hidden />
               </button>
             }
           >

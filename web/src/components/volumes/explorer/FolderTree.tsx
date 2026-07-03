@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, Folder } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { useDroppable } from "@dnd-kit/core";
 import { useVolumeFiles } from "@/hooks/useVolumeFiles";
 import { treeExpandedPathsForSelection } from "@/lib/explorerPaths";
+import { getFileIcon } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 
 type TreeNodeProps = {
@@ -74,7 +75,10 @@ function TreeNode({
           <ChevronRight
             className={cn("h-4 w-4 shrink-0 text-muted transition-transform", isExpanded && "rotate-90")}
           />
-          <Folder className="h-4 w-4 shrink-0 text-muted" />
+          {(() => {
+            const FolderIcon = getFileIcon({ type: "directory", name });
+            return <FolderIcon className="h-4 w-4 shrink-0 text-muted" aria-hidden />;
+          })()}
           <span className="truncate">{name}</span>
         </button>
       </DroppableTreeNode>

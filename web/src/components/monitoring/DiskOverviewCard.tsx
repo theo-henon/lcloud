@@ -1,3 +1,4 @@
+import { HardDrive } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import type { DiskOverview } from "@/lib/api";
 import { formatBytes } from "@/lib/utils";
@@ -16,7 +17,10 @@ export function DiskOverviewCard({ disk }: DiskOverviewCardProps) {
   return (
     <Card className="space-y-4 p-5">
       <div>
-        <h3 className="text-lg font-semibold text-ink">{disk.label}</h3>
+        <h3 className="flex items-center gap-2 text-lg font-semibold text-ink">
+          <HardDrive className="h-5 w-5 shrink-0 text-muted" aria-hidden />
+          {disk.label}
+        </h3>
         {disk.path ? <p className="mt-1 text-sm text-muted">{disk.name}</p> : null}
       </div>
 

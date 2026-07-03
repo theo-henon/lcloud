@@ -1,4 +1,6 @@
+import { HardDrive } from "lucide-react";
 import type { DiskOverview, VolumeSummary } from "@/lib/api";
+import { navIcons } from "@/lib/icons";
 import { formatBytes } from "@/lib/utils";
 
 type UnifiedVolumeListProps = {
@@ -22,7 +24,13 @@ export function UnifiedVolumeList({
   const showDiskColumn = volumes.some((volume) => volume.disk_path !== "");
 
   if (volumes.length === 0) {
-    return <p className="text-sm text-muted">No volumes yet.</p>;
+    const EmptyIcon = navIcons["/volumes"];
+    return (
+      <div className="flex flex-col items-center gap-3 py-6 text-center text-sm text-muted">
+        {EmptyIcon ? <EmptyIcon className="h-8 w-8 text-muted" aria-hidden /> : null}
+        <p>No volumes yet.</p>
+      </div>
+    );
   }
 
   return (
@@ -53,7 +61,12 @@ export function UnifiedVolumeList({
                 }`}
                 onClick={() => onSelect(volume.id)}
               >
-                <td className="px-4 py-3 font-medium text-ink">{volume.name}</td>
+                <td className="px-4 py-3 font-medium text-ink">
+                  <span className="flex items-center gap-2">
+                    <HardDrive className="h-4 w-4 shrink-0 text-muted" aria-hidden />
+                    {volume.name}
+                  </span>
+                </td>
                 <td className="px-4 py-3 text-body">
                   <div className="space-y-1">
                     <span>

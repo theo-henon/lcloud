@@ -6,6 +6,7 @@ import { VolumeStatsPanel } from "@/components/monitoring/VolumeStatsPanel";
 import { Card } from "@/components/ui/card";
 import { useMonitoringOverview } from "@/hooks/useMonitoringOverview";
 import { useRefreshVolumeStats, useVolumeStats } from "@/hooks/useVolumeStats";
+import { navIcons } from "@/lib/icons";
 
 export function MonitoringPage() {
   const overviewQuery = useMonitoringOverview();
@@ -29,7 +30,15 @@ export function MonitoringPage() {
           description="Track space usage and file breakdown across disks."
         />
         <section className="px-8 py-6">
-          <p className="text-sm text-muted">Loading monitoring data...</p>
+          <div className="flex flex-col items-center gap-3 text-center">
+            {(() => {
+              const LoadingIcon = navIcons["/monitoring"];
+              return LoadingIcon ? (
+                <LoadingIcon className="h-8 w-8 text-muted" aria-hidden />
+              ) : null;
+            })()}
+            <p className="text-sm text-muted">Loading monitoring data...</p>
+          </div>
         </section>
       </>
     );

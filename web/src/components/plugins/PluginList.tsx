@@ -2,6 +2,7 @@ import type { PluginRecord } from "@/lib/api";
 import { PluginStatusBadge } from "@/components/plugins/PluginStatusBadge";
 import { Card } from "@/components/ui/card";
 import { useTogglePlugin } from "@/hooks/usePlugins";
+import { navIcons } from "@/lib/icons";
 
 type PluginListProps = {
   plugins: PluginRecord[];
@@ -41,10 +42,14 @@ export function PluginList({ plugins, isAdmin }: PluginListProps) {
   const togglePlugin = useTogglePlugin();
 
   if (plugins.length === 0) {
+    const EmptyIcon = navIcons["/plugins"];
     return (
-      <Card className="p-6 text-sm text-muted">
-        No plugins found — drop a binary and manifest into the plugins directory and restart
-        lcloud.
+      <Card className="flex flex-col items-center gap-3 p-8 text-center text-sm text-muted">
+        {EmptyIcon ? <EmptyIcon className="h-8 w-8 text-muted" aria-hidden /> : null}
+        <p>
+          No plugins found — drop a binary and manifest into the plugins directory and restart
+          lcloud.
+        </p>
       </Card>
     );
   }

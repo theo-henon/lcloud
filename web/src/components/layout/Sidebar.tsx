@@ -2,6 +2,8 @@ import { NavLink } from "react-router-dom";
 import { GlobalSearch } from "@/components/layout/GlobalSearch";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ActionIcon } from "@/lib/icons";
+import { NavIcon } from "@/lib/icons/NavIcon";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth";
 
@@ -89,8 +91,15 @@ export function Sidebar() {
                       )
                     }
                   >
-                    <span>{item.label}</span>
-                    {item.soon ? <Badge>Soon</Badge> : null}
+                    {({ isActive }) => (
+                      <>
+                        <span className="flex items-center gap-2">
+                          <NavIcon to={item.to} active={isActive} />
+                          <span>{item.label}</span>
+                        </span>
+                        {item.soon ? <Badge>Soon</Badge> : null}
+                      </>
+                    )}
                   </NavLink>
                 ))}
               </div>
@@ -102,6 +111,7 @@ export function Sidebar() {
       <div className="border-t border-hairline p-4">
         <div className="mb-3 truncate text-sm text-body">{user?.email}</div>
         <Button variant="outline" className="w-full" onClick={() => void logout()}>
+          <ActionIcon action="logout" className="mr-2" />
           Logout
         </Button>
       </div>

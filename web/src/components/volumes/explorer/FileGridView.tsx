@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { File, Folder } from "lucide-react";
 import { ContextMenuItem } from "@/components/ui/context-menu";
 import { ThumbnailPreview } from "@/components/volumes/ThumbnailPreview";
 import { InlineRename } from "@/components/volumes/explorer/InlineRename";
 import type { FileEntry } from "@/lib/api";
+import { actionIcons, ContextMenuAction, getFileIcon } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 
 const GRID_CARD_CLASS =
@@ -93,9 +93,11 @@ export function FileGridView({
   const [menu, setMenu] = useState<{ entry: FileEntry; x: number; y: number } | null>(null);
 
   if (entries.length === 0) {
+    const EmptyIcon = actionIcons.open;
     return (
-      <div className="rounded-lg border border-hairline bg-surface-card p-6 text-sm text-muted">
-        This folder is empty. Drop files here or create a subfolder.
+      <div className="flex flex-col items-center gap-3 rounded-lg border border-hairline bg-surface-card p-8 text-center text-sm text-muted">
+        <EmptyIcon className="h-8 w-8 text-muted" aria-hidden />
+        <p>This folder is empty. Drop files here or create a subfolder.</p>
       </div>
     );
   }
@@ -103,44 +105,53 @@ export function FileGridView({
   return (
     <>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-        {entries.map((entry) => (
-          <GridCard key={entry.path} entry={entry}>
-            <div
-              onContextMenu={(event) => {
-                event.preventDefault();
-                setMenu({ entry, x: event.clientX, y: event.clientY });
-              }}
-              onDoubleClick={() => {
-                if (entry.type === "directory") {
-                  onOpenDirectory(entry.path);
-                } else {
-                  onOpenEntry(entry);
-                }
-              }}
-            >
-              <div className={GRID_PREVIEW_CLASS}>
-                {entry.type === "directory" ? (
-                  <Folder className="h-10 w-10 text-primary transition-transform duration-150 group-hover:scale-110" />
-                ) : entry.has_thumbnail ? (
-                  <ThumbnailPreview volumeId={volumeId} path={entry.path} />
-                ) : (
-                  <File className="h-10 w-10 text-muted transition-colors duration-150 group-hover:text-body" />
-                )}
-              </div>
-              <InlineRename
-                value={entry.name}
-                active={renamingPath === entry.path}
-                onRequestRename={() => onRenameRequest(entry)}
-                onCommit={(next) => onRenameCommit(entry, next)}
-                onCancel={onRenameCancel}
+        {entries.map((entry) => {
+          const EntryIcon = getFileIcon(entry);
+          return (
+            <GridCard key={entry.path} entry={entry}>
+              <div
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  setMenu({ entry, x: event.clientX, y: event.clientY });
+                }}
+                onDoubleClick={() => {
+                  if (entry.type === "directory") {
+                    onOpenDirectory(entry.path);
+                  } else {
+                    onOpenEntry(entry);
+                  }
+                }}
               >
-                <p className="truncate text-sm font-medium text-ink transition-colors duration-150 group-hover:text-body-strong">
-                  {entry.name}
-                </p>
-              </InlineRename>
-            </div>
-          </GridCard>
-        ))}
+                <div className={GRID_PREVIEW_CLASS}>
+                  {entry.type === "file" && entry.has_thumbnail ? (
+                    <ThumbnailPreview volumeId={volumeId} path={entry.path} />
+                  ) : (
+                    <EntryIcon
+                      className={cn(
+                        "h-10 w-10 transition-colors duration-150",
+                        entry.type === "directory"
+                          ? "text-primary group-hover:scale-110"
+                          : "text-muted group-hover:text-body",
+                      )}
+                      aria-hidden
+                    />
+                  )}
+                </div>
+                <InlineRename
+                  value={entry.name}
+                  active={renamingPath === entry.path}
+                  onRequestRename={() => onRenameRequest(entry)}
+                  onCommit={(next) => onRenameCommit(entry, next)}
+                  onCancel={onRenameCancel}
+                >
+                  <p className="truncate text-sm font-medium text-ink transition-colors duration-150 group-hover:text-body-strong">
+                    {entry.name}
+                  </p>
+                </InlineRename>
+              </div>
+            </GridCard>
+          );
+        })}
       </div>
       {menu ? (
         <div
@@ -154,7 +165,7 @@ export function FileGridView({
               setMenu(null);
             }}
           >
-            Open
+            <ContextMenuAction action="open">Open</ContextMenuAction>
           </ContextMenuItem>
           {menu.entry.type === "file" ? (
             <ContextMenuItem
@@ -163,7 +174,7 @@ export function FileGridView({
                 setMenu(null);
               }}
             >
-              Download
+              <ContextMenuAction action="download">Download</ContextMenuAction>
             </ContextMenuItem>
           ) : null}
           <ContextMenuItem
@@ -172,7 +183,7 @@ export function FileGridView({
               setMenu(null);
             }}
           >
-            Rename
+            <ContextMenuAction action="rename">Rename</ContextMenuAction>
           </ContextMenuItem>
           {menu.entry.type === "file" ? (
             <ContextMenuItem
@@ -181,7 +192,9 @@ export function FileGridView({
                 setMenu(null);
               }}
             >
-              Delete
+              <ContextMenuAction action="delete" destructive>
+                Delete
+              </ContextMenuAction>
             </ContextMenuItem>
           ) : null}
         </div>

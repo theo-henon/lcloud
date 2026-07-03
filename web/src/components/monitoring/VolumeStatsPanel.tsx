@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { MimeBreakdownBars } from "@/components/monitoring/MimeBreakdownBars";
 import type { VolumeStats } from "@/lib/api";
+import { ActionIcon } from "@/lib/icons";
 import { formatBytes } from "@/lib/utils";
 
 type VolumeStatsPanelProps = {
@@ -45,6 +46,7 @@ export function VolumeStatsPanel({
           </p>
         </div>
         <Button variant="outline" disabled={refreshing} onClick={onRefresh}>
+          <ActionIcon action="refresh" className="mr-2" />
           {refreshing ? "Refreshing..." : "Refresh stats"}
         </Button>
       </div>

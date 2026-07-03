@@ -1,8 +1,8 @@
 import { useRef } from "react";
-import { FolderPlus, Grid3X3, List, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import type { ExplorerPrefs, ViewMode } from "@/hooks/useExplorerPrefs";
+import { ActionIcon, actionIcons } from "@/lib/icons";
 
 type ExplorerToolbarProps = {
   prefs: ExplorerPrefs;
@@ -18,22 +18,27 @@ export function ExplorerToolbar({
   onUpload,
 }: ExplorerToolbarProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const ListIcon = actionIcons.listView;
+  const GridIcon = actionIcons.gridView;
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-hairline px-4 py-3">
       <DropdownMenu
         trigger={
           <Button variant="outline">
-            <FolderPlus className="mr-2 h-4 w-4" />
+            <ActionIcon action="new" className="mr-2" />
             New
           </Button>
         }
       >
-        <DropdownMenuItem onSelect={onNewFolder}>New folder</DropdownMenuItem>
+        <DropdownMenuItem onSelect={onNewFolder}>
+          <ActionIcon action="newFolder" className="mr-2" />
+          New folder
+        </DropdownMenuItem>
       </DropdownMenu>
 
       <Button variant="outline" onClick={() => inputRef.current?.click()}>
-        <Upload className="mr-2 h-4 w-4" />
+        <ActionIcon action="upload" className="mr-2" />
         Upload
       </Button>
       <input
@@ -55,14 +60,14 @@ export function ExplorerToolbar({
           onClick={() => onViewModeChange("list")}
           aria-label="List view"
         >
-          <List className="h-4 w-4" />
+          <ListIcon className="h-4 w-4" aria-hidden />
         </Button>
         <Button
           variant={prefs.viewMode === "grid" ? "default" : "outline"}
           onClick={() => onViewModeChange("grid")}
           aria-label="Grid view"
         >
-          <Grid3X3 className="h-4 w-4" />
+          <GridIcon className="h-4 w-4" aria-hidden />
         </Button>
       </div>
     </div>
