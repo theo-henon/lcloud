@@ -499,6 +499,10 @@ func (s *Service) validateTaskInput(
 	return nil
 }
 
+func (s *Service) GetByID(id uuid.UUID) (*Task, error) {
+	return s.findTask(id)
+}
+
 func (s *Service) findTask(id uuid.UUID) (*Task, error) {
 	var task Task
 	if err := s.db.First(&task, "id = ?", id).Error; err != nil {

@@ -15,7 +15,7 @@ import (
 )
 
 func TestTaskCRUD(t *testing.T) {
-	router, service, _, storageRoot := setupTestRouter(t)
+	router, service, _, _, storageRoot := setupTestRouter(t)
 
 	login, err := service.Login("admin@example.com", "adminpass1")
 	require.NoError(t, err)
@@ -82,7 +82,7 @@ func TestTaskCRUD(t *testing.T) {
 }
 
 func TestTaskGlobalForbiddenForUser(t *testing.T) {
-	router, service, _, _ := setupTestRouter(t)
+	router, service, _, _, _ := setupTestRouter(t)
 
 	_, err := service.CreateUser("user@example.com", "password123", auth.RoleUser)
 	require.NoError(t, err)
@@ -108,7 +108,7 @@ func TestTaskGlobalForbiddenForUser(t *testing.T) {
 }
 
 func TestTaskRunDisabled(t *testing.T) {
-	router, service, _, storageRoot := setupTestRouter(t)
+	router, service, _, _, storageRoot := setupTestRouter(t)
 
 	login, err := service.Login("admin@example.com", "adminpass1")
 	require.NoError(t, err)
@@ -160,7 +160,7 @@ func TestTaskRunDisabled(t *testing.T) {
 }
 
 func TestTaskListIsolatedBetweenUsers(t *testing.T) {
-	router, service, volumeService, diskPath := setupTestRouter(t)
+	router, service, volumeService, _, diskPath := setupTestRouter(t)
 
 	userA, err := service.CreateUser("alice@example.com", "password123", auth.RoleUser)
 	require.NoError(t, err)
@@ -212,7 +212,7 @@ func TestTaskListIsolatedBetweenUsers(t *testing.T) {
 }
 
 func TestTaskCreateForbiddenOnForeignVolume(t *testing.T) {
-	router, service, volumeService, diskPath := setupTestRouter(t)
+	router, service, volumeService, _, diskPath := setupTestRouter(t)
 
 	userA, err := service.CreateUser("alice@example.com", "password123", auth.RoleUser)
 	require.NoError(t, err)
@@ -249,7 +249,7 @@ func TestTaskCreateForbiddenOnForeignVolume(t *testing.T) {
 }
 
 func TestTaskListIncludesOwnerEmailForAdmin(t *testing.T) {
-	router, service, volumeService, diskPath := setupTestRouter(t)
+	router, service, volumeService, _, diskPath := setupTestRouter(t)
 
 	user, err := service.CreateUser("creator@example.com", "password123", auth.RoleUser)
 	require.NoError(t, err)
@@ -303,7 +303,7 @@ func TestTaskListIncludesOwnerEmailForAdmin(t *testing.T) {
 }
 
 func TestTaskListOmitsOwnerEmailForRegularUser(t *testing.T) {
-	router, service, volumeService, diskPath := setupTestRouter(t)
+	router, service, volumeService, _, diskPath := setupTestRouter(t)
 
 	user, err := service.CreateUser("creator@example.com", "password123", auth.RoleUser)
 	require.NoError(t, err)
@@ -351,7 +351,7 @@ func TestTaskListOmitsOwnerEmailForRegularUser(t *testing.T) {
 }
 
 func TestVolumeListFilterByOwnerForAdmin(t *testing.T) {
-	router, service, volumeService, diskPath := setupTestRouter(t)
+	router, service, volumeService, _, diskPath := setupTestRouter(t)
 
 	user, err := service.CreateUser("creator@example.com", "password123", auth.RoleUser)
 	require.NoError(t, err)
@@ -414,7 +414,7 @@ func TestVolumeListFilterByOwnerForAdmin(t *testing.T) {
 }
 
 func TestTaskListFilterByOwnerForAdmin(t *testing.T) {
-	router, service, volumeService, diskPath := setupTestRouter(t)
+	router, service, volumeService, _, diskPath := setupTestRouter(t)
 
 	user, err := service.CreateUser("creator@example.com", "password123", auth.RoleUser)
 	require.NoError(t, err)
@@ -471,7 +471,7 @@ func TestTaskListFilterByOwnerForAdmin(t *testing.T) {
 }
 
 func TestTaskListOwnerFilterForbiddenForNonAdmin(t *testing.T) {
-	router, service, _, _ := setupTestRouter(t)
+	router, service, _, _, _ := setupTestRouter(t)
 
 	_, err := service.CreateUser("user@example.com", "password123", auth.RoleUser)
 	require.NoError(t, err)

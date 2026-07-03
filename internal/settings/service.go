@@ -23,7 +23,11 @@ func (s *Service) EnsureDefaults() error {
 	if count > 0 {
 		return nil
 	}
-	return s.db.Create(&InstanceSettings{ID: singletonID, MaskDiskNames: false}).Error
+	return s.db.Create(&InstanceSettings{
+		ID:                            singletonID,
+		MaskDiskNames:                 false,
+		NotifyAdminsOnDeletionRequest: true,
+	}).Error
 }
 
 func (s *Service) Get() (InstanceSettings, error) {
@@ -56,6 +60,9 @@ func (s *Service) Update(input UpdateSettingsInput) (PublicSettings, error) {
 	if input.ProtocolsFTPEnabled != nil {
 		settings.ProtocolsFTPEnabled = *input.ProtocolsFTPEnabled
 	}
+	if input.NotifyAdminsOnDeletionRequest != nil {
+		settings.NotifyAdminsOnDeletionRequest = *input.NotifyAdminsOnDeletionRequest
+	}
 	if err := s.db.Save(&settings).Error; err != nil {
 		return PublicSettings{}, err
 	}
@@ -78,11 +85,20 @@ func (s *Service) ProtocolsFTPEnabled() (bool, error) {
 	return settings.ProtocolsFTPEnabled, nil
 }
 
+func (s *Service) NotifyAdminsOnDeletionRequest() (bool, error) {
+	settings, err := s.Get()
+	if err != nil {
+		return true, err
+	}
+	return settings.NotifyAdminsOnDeletionRequest, nil
+}
+
 func (s *Service) toPublic(settings InstanceSettings) PublicSettings {
 	return PublicSettings{
-		MaskDiskNames:          settings.MaskDiskNames,
-		ProtocolsWebDAVEnabled: settings.ProtocolsWebDAVEnabled,
-		ProtocolsFTPEnabled:    settings.ProtocolsFTPEnabled,
+		MaskDiskNames:                 settings.MaskDiskNames,
+		ProtocolsWebDAVEnabled:        settings.ProtocolsWebDAVEnabled,
+		ProtocolsFTPEnabled:           settings.ProtocolsFTPEnabled,
+		NotifyAdminsOnDeletionRequest: settings.NotifyAdminsOnDeletionRequest,
 	}
 }
 

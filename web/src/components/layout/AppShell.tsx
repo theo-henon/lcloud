@@ -1,5 +1,6 @@
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { ToastHost } from "@/components/notifications/ToastHost";
 
 export function AppShell() {
   return (
@@ -8,6 +9,7 @@ export function AppShell() {
       <div className="flex min-h-screen flex-1 flex-col">
         <Outlet />
       </div>
+      <ToastHost />
     </div>
   );
 }

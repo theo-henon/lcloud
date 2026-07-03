@@ -13,7 +13,7 @@ import (
 )
 
 func TestTrashListRestoreAndPurge(t *testing.T) {
-	router, _, _, storageRoot := setupTestRouter(t)
+	router, _, _, _, storageRoot := setupTestRouter(t)
 	token := loginAsAdmin(t, router)
 	volumeID := createVolume(t, router, token, storageRoot)
 	uploadPNG(t, router, token, volumeID, "trash-me.png")
@@ -81,7 +81,7 @@ func TestTrashListRestoreAndPurge(t *testing.T) {
 }
 
 func TestDeleteFileSoftDeletesToTrash(t *testing.T) {
-	router, _, _, storageRoot := setupTestRouter(t)
+	router, _, _, _, storageRoot := setupTestRouter(t)
 	token := loginAsAdmin(t, router)
 	volumeID := createVolume(t, router, token, storageRoot)
 	uploadPNG(t, router, token, volumeID, "soft.png")
@@ -103,7 +103,7 @@ func TestDeleteFileSoftDeletesToTrash(t *testing.T) {
 }
 
 func TestEmptyTrash(t *testing.T) {
-	router, _, _, storageRoot := setupTestRouter(t)
+	router, _, _, _, storageRoot := setupTestRouter(t)
 	token := loginAsAdmin(t, router)
 	volumeID := createVolume(t, router, token, storageRoot)
 	uploadPNG(t, router, token, volumeID, "a.png")
@@ -140,7 +140,7 @@ func TestEmptyTrash(t *testing.T) {
 }
 
 func TestTrashRestoreRejectsPathTraversalFileID(t *testing.T) {
-	router, _, _, storageRoot := setupTestRouter(t)
+	router, _, _, _, storageRoot := setupTestRouter(t)
 	token := loginAsAdmin(t, router)
 	volumeID := createVolume(t, router, token, storageRoot)
 	_ = storageRoot

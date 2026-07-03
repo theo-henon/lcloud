@@ -19,6 +19,7 @@ import (
 	"github.com/theo-henon/lcloud/internal/dashboard"
 	"github.com/theo-henon/lcloud/internal/indexer"
 	"github.com/theo-henon/lcloud/internal/monitoring"
+	"github.com/theo-henon/lcloud/internal/notification"
 	"github.com/theo-henon/lcloud/internal/plugin"
 	"github.com/theo-henon/lcloud/internal/protocols"
 	protocolftp "github.com/theo-henon/lcloud/internal/protocols/ftp"
@@ -58,6 +59,7 @@ func main() {
 		&task.Task{},
 		&task.TaskRun{},
 		&dashboard.UserDashboardLayout{},
+		&notification.Notification{},
 	); err != nil {
 		log.Fatalf("migrate: %v", err)
 	}
@@ -94,6 +96,10 @@ func main() {
 	trashService.SetEventPublisher(pluginService.Publisher())
 
 	dashboardService := dashboard.NewService(db)
+
+	notificationService := notification.NewService(db, authService, volumeService, taskService, settingsService)
+	notificationService.RegisterSubscribers(pluginService)
+	volumeService.SetDeletionRequestNotifier(notificationService)
 
 	protocolGateway := protocols.NewGateway(authService, volumeService, fileService, settingsService, cfg.FTPPort)
 	ftpServer := protocolftp.NewServer(
@@ -141,8 +147,9 @@ func main() {
 		SettingsService:   settingsService,
 		DashboardService:  dashboardService,
 		PluginService:     pluginService,
-		TaskService:       taskService,
-		IndexManager:      indexManager,
+		TaskService:          taskService,
+		NotificationService:  notificationService,
+		IndexManager:         indexManager,
 		MaxUploadBytes:    cfg.MaxUploadBytes,
 		FTPPort:           cfg.FTPPort,
 		ProtocolGateway:   protocolGateway,

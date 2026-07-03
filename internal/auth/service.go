@@ -220,6 +220,15 @@ func (s *Service) ResolveClaims(tokenClaims *Claims) (*Claims, error) {
 	}, nil
 }
 
+// ListActiveAdminIDs returns IDs of all enabled admin accounts.
+func (s *Service) ListActiveAdminIDs() ([]uuid.UUID, error) {
+	var ids []uuid.UUID
+	err := s.db.Model(&User{}).
+		Where("role = ? AND disabled_at IS NULL", RoleAdmin).
+		Pluck("id", &ids).Error
+	return ids, err
+}
+
 // EmailsByIDs returns a map of user id → email for the given ids (deduplicated).
 func (s *Service) EmailsByIDs(ids []uuid.UUID) (map[uuid.UUID]string, error) {
 	if len(ids) == 0 {

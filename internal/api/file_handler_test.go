@@ -11,7 +11,7 @@ import (
 )
 
 func TestFileMoveAndRename(t *testing.T) {
-	router, _, _, storageRoot := setupTestRouter(t)
+	router, _, _, _, storageRoot := setupTestRouter(t)
 	token := loginAsAdmin(t, router)
 	volumeID := createVolume(t, router, token, storageRoot)
 	uploadPNG(t, router, token, volumeID, "photo.png")
@@ -42,7 +42,7 @@ func TestFileMoveAndRename(t *testing.T) {
 }
 
 func TestFileContentInlineDisposition(t *testing.T) {
-	router, _, _, storageRoot := setupTestRouter(t)
+	router, _, _, _, storageRoot := setupTestRouter(t)
 	token := loginAsAdmin(t, router)
 	volumeID := createVolume(t, router, token, storageRoot)
 	uploadPNG(t, router, token, volumeID, "inline.png")
@@ -56,7 +56,7 @@ func TestFileContentInlineDisposition(t *testing.T) {
 }
 
 func TestFileMoveNotAFile(t *testing.T) {
-	router, _, _, storageRoot := setupTestRouter(t)
+	router, _, _, _, storageRoot := setupTestRouter(t)
 	token := loginAsAdmin(t, router)
 	volumeID := createVolume(t, router, token, storageRoot)
 

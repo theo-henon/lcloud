@@ -28,10 +28,11 @@ type PatchVolumeInput struct {
 }
 
 type Service struct {
-	db           *gorm.DB
-	disks        *DiskRegistry
-	indexManager *indexer.IndexManager
-	events       EventPublisher
+	db               *gorm.DB
+	disks            *DiskRegistry
+	indexManager     *indexer.IndexManager
+	events           EventPublisher
+	deletionNotifier DeletionRequestNotifier
 }
 
 func NewService(db *gorm.DB, disks *DiskRegistry, indexManager *indexer.IndexManager) *Service {
@@ -44,6 +45,10 @@ func NewService(db *gorm.DB, disks *DiskRegistry, indexManager *indexer.IndexMan
 
 func (s *Service) SetEventPublisher(events EventPublisher) {
 	s.events = events
+}
+
+func (s *Service) SetDeletionRequestNotifier(notifier DeletionRequestNotifier) {
+	s.deletionNotifier = notifier
 }
 
 func (s *Service) List(claims *auth.Claims, ownerID *uuid.UUID) ([]Volume, error) {
@@ -308,7 +313,13 @@ func (s *Service) RequestDeletion(claims *auth.Claims, volumeID uuid.UUID) error
 		UserID:   claims.UserID,
 		Status:   DeletionRequestPending,
 	}
-	return s.db.Create(req).Error
+	if err := s.db.Create(req).Error; err != nil {
+		return err
+	}
+	if s.deletionNotifier != nil {
+		_ = s.deletionNotifier.NotifyDeletionRequest(context.Background(), *req)
+	}
+	return nil
 }
 
 func (s *Service) ListPendingDeletionRequests() ([]DeletionRequestResponse, error) {

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import type { TaskRecord } from "@/lib/api";
 import { Header } from "@/components/layout/Header";
 import { OwnerFilter } from "@/components/filters/OwnerFilter";
@@ -16,11 +17,21 @@ import { useAuthStore } from "@/store/auth";
 export function TasksPage() {
   const user = useAuthStore((state) => state.user);
   const isAdmin = user?.role === "admin";
+  const [searchParams, setSearchParams] = useSearchParams();
   const [ownerFilter, setOwnerFilter] = useState("");
   const [volumeFilter, setVolumeFilter] = useState<string>("");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<TaskRecord | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(
+    () => searchParams.get("task") || null,
+  );
+
+  useEffect(() => {
+    const taskParam = searchParams.get("task");
+    if (taskParam) {
+      setSelectedId(taskParam);
+    }
+  }, [searchParams]);
 
   const usersQuery = useAdminUsers(isAdmin);
   const volumesForFormQuery = useVolumes();
@@ -163,7 +174,14 @@ export function TasksPage() {
             tasks={tasksQuery.data.tasks}
             isAdmin={isAdmin}
             selectedId={selectedId}
-            onSelect={setSelectedId}
+            onSelect={(id) => {
+              setSelectedId(id);
+              if (id) {
+                setSearchParams({ task: id });
+              } else {
+                setSearchParams({});
+              }
+            }}
             onEdit={(task) => {
               setEditing(task);
               setShowForm(true);

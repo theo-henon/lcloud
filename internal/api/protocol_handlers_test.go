@@ -13,7 +13,7 @@ import (
 )
 
 func TestProtocolHandlers(t *testing.T) {
-	router, authService, volumeService, storageRoot := setupTestRouter(t)
+	router, authService, volumeService, _, storageRoot := setupTestRouter(t)
 
 	login, err := authService.Login("admin@example.com", "adminpass1")
 	require.NoError(t, err)

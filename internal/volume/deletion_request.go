@@ -1,10 +1,15 @@
 package volume
 
 import (
+	"context"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+type DeletionRequestNotifier interface {
+	NotifyDeletionRequest(ctx context.Context, req VolumeDeletionRequest) error
+}
 
 type DeletionRequestStatus string
 

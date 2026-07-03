@@ -83,6 +83,10 @@ func (s *Service) PublishEvent(ctx context.Context, event Event) {
 	s.bus.Publish(ctx, event)
 }
 
+func (s *Service) Subscribe(eventType string, handler EventHandler) {
+	s.bus.Subscribe(eventType, handler)
+}
+
 type volumeProvider struct {
 	volumes *volume.Service
 }
