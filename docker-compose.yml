@@ -19,6 +19,8 @@ services:
     build: .
     ports:
       - "${APP_PORT:-8080}:8080"
+      - "${FTP_PORT:-2121}:${FTP_PORT:-2121}"
+      - "${FTP_PASV_MIN:-30000}-${FTP_PASV_MAX:-30010}:${FTP_PASV_MIN:-30000}-${FTP_PASV_MAX:-30010}/tcp"
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
       JWT_SECRET: ${JWT_SECRET}
@@ -33,6 +35,10 @@ services:
       PLUGINS_PATH: /plugins
       APP_PORT: "8080"
       GIN_MODE: ${GIN_MODE:-release}
+      FTP_PORT: ${FTP_PORT:-2121}
+      FTP_PASV_MIN: ${FTP_PASV_MIN:-30000}
+      FTP_PASV_MAX: ${FTP_PASV_MAX:-30010}
+      FTP_PASV_ADDRESS: ${FTP_PASV_ADDRESS:-127.0.0.1}
     volumes:
       - ${STORAGE_BASE_PATH:-./data/storage}:/data/storage
       - ${DISK_SSD:-./data/disks/ssd}:/data/disks/ssd

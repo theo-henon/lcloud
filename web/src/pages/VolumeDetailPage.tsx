@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Header } from "@/components/layout/Header";
 import { VolumeExplorer } from "@/components/volumes/explorer/VolumeExplorer";
+import { ProtocolSettingsPanel } from "@/components/volumes/ProtocolSettingsPanel";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useVolume } from "@/hooks/useVolumes";
@@ -67,6 +68,7 @@ export function VolumeDetailPage() {
 
       <section className="px-8 py-6">
         <VolumeExplorer volumeId={id} currentPath={currentPath} onPathChange={handlePathChange} />
+        <ProtocolSettingsPanel volumeId={id} />
       </section>
     </>
   );

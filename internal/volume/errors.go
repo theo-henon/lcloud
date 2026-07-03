@@ -16,6 +16,7 @@ var (
 	ErrPathTraversal      = errors.New("path traversal detected")
 	ErrFileNotFound       = errors.New("file not found")
 	ErrDirectoryExists    = errors.New("directory already exists")
+	ErrDirectoryNotEmpty  = errors.New("directory not empty")
 	ErrNotDirectory       = errors.New("not a directory")
 	ErrNotAFile           = errors.New("not a file")
 	ErrInvalidEntryName   = errors.New("invalid entry name")

@@ -13,8 +13,11 @@ export function useUpdateSettings() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (maskDiskNames: boolean) =>
-      api.patchAdminSettings({ mask_disk_names: maskDiskNames }),
+    mutationFn: (input: {
+      mask_disk_names?: boolean;
+      protocols_webdav_enabled?: boolean;
+      protocols_ftp_enabled?: boolean;
+    }) => api.patchAdminSettings(input),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["settings"] });
       void queryClient.invalidateQueries({ queryKey: ["monitoring"] });

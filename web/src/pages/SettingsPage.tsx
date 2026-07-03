@@ -3,18 +3,20 @@ import { Card } from "@/components/ui/card";
 import { useSettings, useUpdateSettings } from "@/hooks/useSettings";
 import { useAuthStore } from "@/store/auth";
 
-function MaskDiskNamesToggle({
+function SettingsToggle({
+  label,
   enabled,
   disabled,
   onChange,
 }: {
+  label: string;
   enabled: boolean;
   disabled?: boolean;
   onChange: (value: boolean) => void;
 }) {
   return (
     <label className="inline-flex cursor-pointer items-center gap-3 text-sm text-body">
-      <span>Hide disk names</span>
+      <span>{label}</span>
       <button
         type="button"
         role="switch"
@@ -42,6 +44,8 @@ export function SettingsPage() {
   const updateSettings = useUpdateSettings();
 
   const maskDiskNames = settingsQuery.data?.mask_disk_names ?? false;
+  const webdavEnabled = settingsQuery.data?.protocols_webdav_enabled ?? false;
+  const ftpEnabled = settingsQuery.data?.protocols_ftp_enabled ?? false;
 
   return (
     <>
@@ -68,11 +72,12 @@ export function SettingsPage() {
           ) : settingsQuery.isError ? (
             <p className="text-sm text-accent-rose">Unable to load settings.</p>
           ) : isAdmin ? (
-            <MaskDiskNamesToggle
+            <SettingsToggle
+              label="Hide disk names"
               enabled={maskDiskNames}
               disabled={updateSettings.isPending}
               onChange={(value) => {
-                void updateSettings.mutateAsync(value);
+                void updateSettings.mutateAsync({ mask_disk_names: value });
               }}
             />
           ) : (
@@ -82,6 +87,52 @@ export function SettingsPage() {
                 {maskDiskNames ? "hidden" : "visible"}
               </span>
               . Only an administrator can change this option.
+            </p>
+          )}
+        </Card>
+
+        <Card className="space-y-4 p-6">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
+              Native volume access
+            </h2>
+            <p className="mt-2 text-sm text-body">
+              Master switches for WebDAV and FTP. Users can only enable protocols on their volumes
+              when the corresponding switch is on here. Both default to off.
+            </p>
+          </div>
+
+          {settingsQuery.isLoading ? (
+            <p className="text-sm text-muted">Loading settings...</p>
+          ) : settingsQuery.isError ? (
+            <p className="text-sm text-accent-rose">Unable to load settings.</p>
+          ) : isAdmin ? (
+            <div className="space-y-4">
+              <SettingsToggle
+                label="Enable WebDAV instance-wide"
+                enabled={webdavEnabled}
+                disabled={updateSettings.isPending}
+                onChange={(value) => {
+                  void updateSettings.mutateAsync({ protocols_webdav_enabled: value });
+                }}
+              />
+              <SettingsToggle
+                label="Enable FTP instance-wide"
+                enabled={ftpEnabled}
+                disabled={updateSettings.isPending}
+                onChange={(value) => {
+                  void updateSettings.mutateAsync({ protocols_ftp_enabled: value });
+                }}
+              />
+            </div>
+          ) : (
+            <p className="text-sm text-body">
+              WebDAV is{" "}
+              <span className="font-medium text-ink">{webdavEnabled ? "enabled" : "disabled"}</span>
+              {" · "}
+              FTP is{" "}
+              <span className="font-medium text-ink">{ftpEnabled ? "enabled" : "disabled"}</span>{" "}
+              instance-wide. Only an administrator can change these options.
             </p>
           )}
         </Card>

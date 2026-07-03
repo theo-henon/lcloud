@@ -205,7 +205,32 @@ export interface GlobalSearchResponse {
 
 export interface InstanceSettings {
   mask_disk_names: boolean;
+  protocols_webdav_enabled: boolean;
+  protocols_ftp_enabled: boolean;
   max_upload_bytes: number;
+}
+
+export interface ProtocolToggle {
+  enabled: boolean;
+}
+
+export interface VolumeProtocolsConnection {
+  webdav_url: string;
+  ftp_host: string;
+  ftp_port: number;
+  ftp_username: string;
+  webdav_username_hint: string;
+}
+
+export interface VolumeProtocolsInfo {
+  webdav: ProtocolToggle;
+  ftp: ProtocolToggle;
+  connection: VolumeProtocolsConnection;
+}
+
+export interface PatchVolumeProtocolsInput {
+  webdav?: ProtocolToggle;
+  ftp?: ProtocolToggle;
 }
 
 export type TaskScope = "volume" | "global";
@@ -586,8 +611,21 @@ export const api = {
   getSettings() {
     return apiRequest<InstanceSettings>("/api/settings");
   },
-  patchAdminSettings(input: { mask_disk_names: boolean }) {
+  patchAdminSettings(input: {
+    mask_disk_names?: boolean;
+    protocols_webdav_enabled?: boolean;
+    protocols_ftp_enabled?: boolean;
+  }) {
     return apiRequest<InstanceSettings>("/api/admin/settings", {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    });
+  },
+  getVolumeProtocols(volumeId: string) {
+    return apiRequest<VolumeProtocolsInfo>(`/api/volumes/${volumeId}/protocols`);
+  },
+  patchVolumeProtocols(volumeId: string, input: PatchVolumeProtocolsInput) {
+    return apiRequest<VolumeProtocolsInfo>(`/api/volumes/${volumeId}/protocols`, {
       method: "PATCH",
       body: JSON.stringify(input),
     });

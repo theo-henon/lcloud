@@ -1,8 +1,10 @@
 package settings
 
 type InstanceSettings struct {
-	ID            uint `gorm:"primaryKey"`
-	MaskDiskNames bool `gorm:"not null;default:false"`
+	ID                     uint `gorm:"primaryKey"`
+	MaskDiskNames          bool `gorm:"not null;default:false"`
+	ProtocolsWebDAVEnabled bool `gorm:"not null;default:false"`
+	ProtocolsFTPEnabled    bool `gorm:"not null;default:false"`
 }
 
 func (InstanceSettings) TableName() string {
@@ -10,10 +12,14 @@ func (InstanceSettings) TableName() string {
 }
 
 type PublicSettings struct {
-	MaskDiskNames  bool  `json:"mask_disk_names"`
-	MaxUploadBytes int64 `json:"max_upload_bytes"`
+	MaskDiskNames          bool  `json:"mask_disk_names"`
+	ProtocolsWebDAVEnabled bool  `json:"protocols_webdav_enabled"`
+	ProtocolsFTPEnabled    bool  `json:"protocols_ftp_enabled"`
+	MaxUploadBytes         int64 `json:"max_upload_bytes"`
 }
 
 type UpdateSettingsInput struct {
-	MaskDiskNames *bool `json:"mask_disk_names"`
+	MaskDiskNames          *bool `json:"mask_disk_names"`
+	ProtocolsWebDAVEnabled *bool `json:"protocols_webdav_enabled"`
+	ProtocolsFTPEnabled    *bool `json:"protocols_ftp_enabled"`
 }

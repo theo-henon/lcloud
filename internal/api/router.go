@@ -14,6 +14,8 @@ import (
 	"github.com/theo-henon/lcloud/internal/indexer"
 	"github.com/theo-henon/lcloud/internal/monitoring"
 	"github.com/theo-henon/lcloud/internal/plugin"
+	"github.com/theo-henon/lcloud/internal/protocols"
+	protocolwebdav "github.com/theo-henon/lcloud/internal/protocols/webdav"
 	"github.com/theo-henon/lcloud/internal/settings"
 	"github.com/theo-henon/lcloud/internal/task"
 	"github.com/theo-henon/lcloud/internal/volume"
@@ -231,6 +233,8 @@ type RouterConfig struct {
 	TaskService       *task.Service
 	IndexManager      *indexer.IndexManager
 	MaxUploadBytes    int64
+	FTPPort           int
+	ProtocolGateway   *protocols.Gateway
 	StaticFS          fs.FS
 	GinMode           string
 }
@@ -258,6 +262,11 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	adminSettingsHandler := NewAdminSettingsHandler(cfg.SettingsService, cfg.MaxUploadBytes)
 	pluginHandler := NewPluginHandler(cfg.PluginService)
 	taskHandler := NewTaskHandler(cfg.TaskService)
+	protocolHandler := NewProtocolHandler(cfg.VolumeService, cfg.FTPPort)
+
+	if cfg.ProtocolGateway != nil {
+		protocolwebdav.RegisterRoutes(router, cfg.ProtocolGateway)
+	}
 
 	api := router.Group("/api")
 	{
@@ -293,6 +302,8 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			protected.POST("/volumes", volumeHandler.Create)
 			protected.GET("/volumes/:id", volumeHandler.Get)
 			protected.PATCH("/volumes/:id", volumeHandler.Patch)
+			protected.GET("/volumes/:id/protocols", protocolHandler.Get)
+			protected.PATCH("/volumes/:id/protocols", protocolHandler.Patch)
 			protected.DELETE("/volumes/:id", volumeHandler.Delete)
 			protected.POST("/volumes/:id/deletion-request", volumeHandler.RequestDeletion)
 
