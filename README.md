@@ -137,6 +137,12 @@ lcloud/
 
 ---
 
+## License
+
+MIT — see [LICENSE](./LICENSE).
+
+---
+
 ## Contribute
 
 This project uses **agent-skills** (https://github.com/addyosmani/agent-skills) installed globally. See [AGENTS.md](./AGENTS.md) for project conventions and agent pointers.
