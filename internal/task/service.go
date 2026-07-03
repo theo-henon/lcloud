@@ -16,6 +16,7 @@ import (
 type Service struct {
 	db        *gorm.DB
 	volumes   *volume.Service
+	auth      *auth.Service
 	executor  *Executor
 	scheduler *Scheduler
 	locks     *RunLocks
@@ -25,12 +26,14 @@ type Service struct {
 func NewService(
 	db *gorm.DB,
 	volumes *volume.Service,
+	authService *auth.Service,
 	executor *Executor,
 	events *plugin.Service,
 ) *Service {
 	s := &Service{
 		db:       db,
 		volumes:  volumes,
+		auth:     authService,
 		executor: executor,
 		locks:    NewRunLocks(),
 		events:   events,
@@ -66,9 +69,10 @@ type PatchTaskInput struct {
 
 type TaskView struct {
 	Task
-	VolumeName          string  `json:"volume_name,omitempty"`
-	ScheduleDescription string  `json:"schedule_description"`
-	LastRunStatus       string  `json:"last_run_status,omitempty"`
+	OwnerEmail          string `json:"owner_email,omitempty"`
+	VolumeName          string `json:"volume_name,omitempty"`
+	ScheduleDescription string `json:"schedule_description"`
+	LastRunStatus       string `json:"last_run_status,omitempty"`
 }
 
 func (s *Service) Create(ctx context.Context, claims *auth.Claims, input CreateTaskInput) (*TaskView, error) {
@@ -121,10 +125,12 @@ func (s *Service) Create(ctx context.Context, claims *auth.Claims, input CreateT
 	return s.toView(&task)
 }
 
-func (s *Service) List(claims *auth.Claims, volumeID *uuid.UUID) ([]TaskView, error) {
+func (s *Service) List(claims *auth.Claims, volumeID *uuid.UUID, ownerID *uuid.UUID) ([]TaskView, error) {
 	query := s.db.Order("created_at desc")
 	if claims.Role != auth.RoleAdmin {
 		query = query.Where("owner_id = ?", claims.UserID)
+	} else if ownerID != nil {
+		query = query.Where("owner_id = ?", *ownerID)
 	}
 	if volumeID != nil {
 		query = query.Where("volume_id = ?", *volumeID)
@@ -143,6 +149,21 @@ func (s *Service) List(claims *auth.Claims, volumeID *uuid.UUID) ([]TaskView, er
 		}
 		views = append(views, *view)
 	}
+
+	if claims.Role == auth.RoleAdmin && len(views) > 0 {
+		ownerIDs := make([]uuid.UUID, len(views))
+		for i := range views {
+			ownerIDs[i] = views[i].OwnerID
+		}
+		emails, err := s.auth.EmailsByIDs(ownerIDs)
+		if err != nil {
+			return nil, err
+		}
+		for i := range views {
+			views[i].OwnerEmail = emails[views[i].OwnerID]
+		}
+	}
+
 	return views, nil
 }
 
@@ -154,7 +175,18 @@ func (s *Service) Get(claims *auth.Claims, id uuid.UUID) (*TaskView, error) {
 	if err := s.authorizeTask(claims, task); err != nil {
 		return nil, err
 	}
-	return s.toView(task)
+	view, err := s.toView(task)
+	if err != nil {
+		return nil, err
+	}
+	if claims.Role == auth.RoleAdmin {
+		emails, err := s.auth.EmailsByIDs([]uuid.UUID{task.OwnerID})
+		if err != nil {
+			return nil, err
+		}
+		view.OwnerEmail = emails[task.OwnerID]
+	}
+	return view, nil
 }
 
 func (s *Service) Patch(ctx context.Context, claims *auth.Claims, id uuid.UUID, input PatchTaskInput) (*TaskView, error) {

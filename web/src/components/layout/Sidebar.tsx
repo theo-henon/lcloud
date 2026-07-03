@@ -41,7 +41,7 @@ const navGroups: NavGroup[] = [
     title: "System",
     items: [
       { label: "Settings", to: "/settings" },
-      { label: "Users", to: "/settings/users", soon: true, adminOnly: true },
+      { label: "Users", to: "/settings/users", adminOnly: true },
     ],
   },
 ];

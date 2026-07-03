@@ -2,10 +2,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CreateTaskInput, PatchTaskInput } from "@/lib/api";
 import { api } from "@/lib/api";
 
-export function useTasks(volumeId?: string) {
+export function useTasks(filters?: { volumeId?: string; ownerId?: string }) {
+  const volumeId = filters?.volumeId;
+  const ownerId = filters?.ownerId;
   return useQuery({
-    queryKey: ["tasks", volumeId ?? "all"],
-    queryFn: () => api.listTasks(volumeId),
+    queryKey: ["tasks", volumeId ?? "all", ownerId ?? "all"],
+    queryFn: () => api.listTasks(filters),
     staleTime: 15_000,
   });
 }

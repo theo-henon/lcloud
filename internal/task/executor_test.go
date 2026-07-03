@@ -58,7 +58,7 @@ func TestExecutorDeleteOldFilesDryRun(t *testing.T) {
 	diskRegistry := volume.NewDiskRegistry(cfg)
 	indexManager := indexer.NewIndexManager()
 	volSvc := volume.NewService(db, diskRegistry, indexManager)
-	mon := monitoring.NewService(volSvc, diskRegistry, nil)
+	mon := monitoring.NewService(volSvc, diskRegistry, nil, nil)
 	ops := volume.NewMacroOps(volSvc, indexManager, nil, noopPublisher{})
 	exec := NewExecutor(ops, mon, volSvc, nil)
 

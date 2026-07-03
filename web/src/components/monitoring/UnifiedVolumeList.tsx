@@ -22,6 +22,7 @@ export function UnifiedVolumeList({
   onSelect,
 }: UnifiedVolumeListProps) {
   const showDiskColumn = volumes.some((volume) => volume.disk_path !== "");
+  const showOwnerColumn = volumes.some((volume) => volume.owner_email);
 
   if (volumes.length === 0) {
     const EmptyIcon = navIcons["/volumes"];
@@ -42,6 +43,7 @@ export function UnifiedVolumeList({
             <th className="px-4 py-3 font-medium">Usage</th>
             <th className="px-4 py-3 font-medium">Files</th>
             <th className="px-4 py-3 font-medium">Top type</th>
+            {showOwnerColumn ? <th className="px-4 py-3 font-medium">Owner</th> : null}
             {showDiskColumn ? <th className="px-4 py-3 font-medium">Disk</th> : null}
           </tr>
         </thead>
@@ -88,6 +90,9 @@ export function UnifiedVolumeList({
                 <td className="px-4 py-3 capitalize text-body">
                   {volume.top_category ?? "—"}
                 </td>
+                {showOwnerColumn ? (
+                  <td className="px-4 py-3 text-body">{volume.owner_email ?? "—"}</td>
+                ) : null}
                 {showDiskColumn ? (
                   <td className="px-4 py-3 text-muted">
                     {diskLabel(volume.disk_path, disks)}

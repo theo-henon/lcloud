@@ -24,7 +24,7 @@ Do **not** add entries for bugs, typos, or one-line fixes — use `/build` or `f
 
 ### Entry template
 
-Each idea uses the same shape (see **In-app notification system** or **User management UI** below):
+Each idea uses the same shape (see **In-app notification system** below):
 
 ```markdown
 ### Short title
@@ -179,64 +179,10 @@ Strategic shifts (new audience, new deployment model) → **VISION.md**, not IDE
 
 **Possible scope (post-MVP `/spec`):**
 - Notification model + API (`GET /notifications`, mark read, dismiss)
+- **Volume deletion requests (phase B)** — admin notified when a `user` requests volume deletion (see **User-owned volumes — phase B** in Shipped section)
 - UI: toast on new alert, sidebar/header bell with history
 - Subscribers: `volume.alert.usage`, `task.failed`, plugin custom events
 - Out of scope for v1 of this idea: email, push, SMS (those stay plugin/webhook territory)
-
----
-
-### User management UI (admin)
-**Context:** Phase 0 shipped admin-only user creation via API (`POST /api/admin/users`) and a placeholder page at `/settings/users` (sidebar link with "Soon" badge). Post-MVP, admins still create users via curl or external tooling — no list, role change, or disable flow in the web UI.
-**Value:** Manage team or family accounts from the control panel: see who has access, create users, assign `admin` / `user` roles, and revoke access without leaving the browser.
-**Estimated effort:** Medium
-**Dependencies:** Phase 0 auth (JWT, roles, admin seed); MVP complete
-**Date:** 2026-07-02
-
-**Product constraint (not up for debate in this idea):**
-- **Admin-provisioned accounts only** — the admin creates every user account; there is no public signup, no invitation link, no self-registration flow
-- **No OAuth / social login** (Google, GitHub, etc.) — email + password only, aligned with self-hosted homelab use
-- Login page stays **sign-in only**; account creation lives exclusively on `/settings/users` (admin)
-
-**Possible scope (post-MVP `/spec`):**
-- Backend: `GET /api/admin/users`, `PATCH` (role, disable), optional soft-disable; admin-initiated password reset (set new password — no email pipeline)
-- UI: replace placeholder at `/settings/users` — user table, **admin-only create-user form**, role badges
-- Safeguards: cannot demote/delete the last admin; optional disable instead of hard delete
-- **Explicitly out of scope** (this project, for now): self-service signup, registration page, OAuth/SSO, password-reset email, per-volume ACL (volume ownership is a separate idea)
-
----
-
-### Volume file explorer UX redesign
-**Context:** MVP ships a functional but minimal file browser on `/volumes/:id` — flat table (`FileBrowser`), breadcrumb only, a permanent drag-and-drop upload banner above the list, and an always-visible "New folder" text field + button. Operator feedback (post-MVP): the layout does not resemble any familiar product; upload and folder creation **pollute** the main area instead of living in standard controls; files cannot be dropped **onto** the file list itself. Navigation is click-folder-name-in-table only — no sidebar tree, view switcher, or inline rename. FTP/WebDAV are separate ideas; the web UI should feel like a known cloud drive on day one.
-**Value:** Reuse interaction patterns from **OneDrive, Google Drive, Dropbox**, plus desktop habits (Windows Explorer inline rename): users already know where upload, "New folder", views, and rename live — no learning curve for a custom lcloud layout.
-**Estimated effort:** Medium to Heavy
-**Dependencies:** Phase 1.1 volumes + file API (shipped); **rename/move API** not exposed to web yet (`MoveFileInternal` exists for macros only); `design/DESIGN.md` for UI pass
-**Date:** 2026-07-02
-
-**Operator pain points to fix:**
-- Remove the permanent upload zone — **drop files directly on the file list / folder area** (visual feedback on drag-over)
-- Remove the always-visible folder name text box — **"New" / "+" control** opens create-folder flow (inline or small dialog)
-- Overall layout = **standard cloud file manager**, not admin table + forms stack
-
-**Operator decisions (direction for `/spec`):**
-- **Sidebar folder tree** — yes; lazy-loaded tree on the left, contents on the right (Drive / Explorer hybrid)
-- **Multiple views** — switchable **list** and **grid** (thumbnails); view preference remembered in the browser
-- **Flexible list view** — user can show/hide columns, **resize** column widths, **reorder** columns; **launch columns:** name (required), **size**, **modified date** — type and others optional via column picker
-- **Layout prefs** — **localStorage first** (view mode, column set, order, widths); note for later: evaluate whether **server-side persistence** per user is worth it once the UI is in daily use
-- **Inline rename** — Windows Explorer style: F2, right-click → Rename, or slow double-click on name; label becomes editable in place; files and folders
-- **Drag-and-drop move** — drag file(s) onto a folder in the tree or list to move them (same mental model as desktop/cloud drives); distinct from upload drop (external files → volume)
-
-**Possible scope (post-MVP `/spec`):**
-- **Layout:** left folder tree + top toolbar (New, Upload, view toggle, column picker) + main contents pane
-- **Upload:** drop external files onto contents pane; optional Upload button in toolbar
-- **Move:** drag internal items onto folder targets (tree node or folder row); visual highlight on valid drop target
-- **Navigation:** tree selection + breadcrumb/path bar, double-click folder to open
-- **Views:** list (customizable columns) + grid (icons/thumbnails)
-- **Actions:** context menu (download, delete, rename); inline rename as above
-- **Backend:** expose rename + move for web UI (wrap `MoveFileInternal` / volume layer); emit `file.moved` / `file.renamed` on event bus
-- **Out of scope for v1:** FTP/WebDAV UI, sync/conflict UI, in-browser editor, server-side layout prefs (deferred — test need after v1)
-
-**Follow-up to validate post-ship:**
-- Is server-side storage of view/column preferences useful (multi-device, shared admin workstation)?
 
 ---
 
@@ -343,27 +289,6 @@ Strategic shifts (new audience, new deployment model) → **VISION.md**, not IDE
 
 ---
 
-### Control panel iconography pass
-**Context:** MVP UI is text-heavy: sidebar nav items are labels only (no icons), toolbar/action buttons are mostly text ("Download", "Delete", "Create folder", "Logout"), and file rows lack type icons. `lucide-react` is already in `web/package.json` but unused in components. Operator feedback: the control panel feels sparse and harder to scan — icons beside nav entries and actions would improve recognition and visual hierarchy without changing behavior.
-**Value:** Faster navigation and clearer affordances: users spot Volumes vs Tasks vs Settings at a glance; actions read like a familiar desktop/cloud app; overall polish aligned with `design/DESIGN.md` (icon buttons documented, yellow + dark surfaces).
-**Estimated effort:** Quick to Medium
-**Dependencies:** `design/DESIGN.md`; optional coordination with volume explorer redesign and dashboard widgets (icons should stay consistent)
-**Date:** 2026-07-02
-
-**Operator direction:**
-- **Sidebar** — one icon per nav item (Dashboard, Volumes, Monitoring, Plugins, Tasks, Settings, Users); consistent size and muted color, primary tint when active
-- **Actions** — icon + label (or icon-only with tooltip) on common buttons: upload, new folder, refresh, download, delete, run task, logout
-- **Files & volumes** — folder / file-type icons in lists (image, video, document, generic file); optional disk/volume icons in cards
-- **Empty & status states** — light illustration or icon where it helps (empty folder, loading, error)
-
-**Possible scope (post-MVP `/spec`):**
-- Define a small **icon map** (nav + file categories + actions) in one module; Lucide defaults, no custom SVG sprawl
-- Roll out in passes: sidebar + header first, then volume/file browser, then tasks/plugins
-- Accessibility: decorative icons `aria-hidden`; icon-only buttons keep `aria-label`
-- **Out of scope:** custom brand icon set, animated icons, emoji-as-icons
-
----
-
 ### Unified Spotlight search (command palette)
 **Context:** MVP search is **files-only**: `GlobalSearch` lives in the sidebar (Bleve metadata across volumes). Operator direction (macOS **Spotlight** reference): a **central search** invoked from anywhere — keyboard shortcut (e.g. `⌘K` / `Ctrl+K`) or header button — overlay modal, one query box, results grouped by **category**, not a deep file-only hunt in the sidebar.
 **Value:** "Search everything in lcloud" from one place: jump to a file, task, plugin, volume, or page. Admin and user both use it; results respect existing permissions (user sees own volumes/tasks only). Familiar mental model like Spotlight / VS Code command palette / Raycast.
@@ -381,7 +306,7 @@ Strategic shifts (new audience, new deployment model) → **VISION.md**, not IDE
 | **Tasks** | Task name, macro | `GET /api/tasks` — client filter or new endpoint |
 | **Plugins** | Plugin name, status | `GET /api/plugins` — client filter or new endpoint |
 | **Navigation** | Pages / actions ("Monitoring", "Settings", "New volume") | Static registry in frontend |
-| **Users** *(admin)* | Account email | ❌ until User management UI API |
+| **Users** *(admin)* | Account email | `GET /api/admin/users` ✅ |
 
 **Operator direction:**
 - **Spotlight-style overlay** — dim background, centered search field, instant results below grouped by category ("Files", "Tasks", "Plugins"…)
@@ -398,7 +323,34 @@ Strategic shifts (new audience, new deployment model) → **VISION.md**, not IDE
 
 **Related ideas:**
 - **Full-text content search via Bleve** — powers the **Content** category inside the same palette
-- **Control panel iconography pass** — category icons in result rows
+- **Control panel iconography (shipped)** — category icons in result rows
+
+---
+
+## Shipped (archived)
+
+> Features implemented and merged (or on an open PR). Kept as short pointers — not part of the active parking lot. See lifecycle above.
+
+### User management UI (admin)
+**Shipped:** 2026-07-03 — PR [#11](https://github.com/theo-henon/lcloud/pull/11) (`feature/user-management-ui`, pending merge). Spec: [docs/features/user-management-ui/SPEC.md](docs/features/user-management-ui/SPEC.md). `/settings/users` — list, create, role change, disable, admin password reset. Admin-provisioned accounts only; no OAuth/self-signup.
+
+### User-owned volumes and deletion requests (phase A)
+**Shipped:** 2026-07-03 — same PR. Spec: [docs/features/user-owned-volumes/SPEC.md](docs/features/user-owned-volumes/SPEC.md). Users create own volumes (masked disk picker); delete admin-only; deletion-request queue for admin. **Phase B** (bell notification on request) → **In-app notification system**.
+
+### User-scoped tasks
+**Shipped:** 2026-07-03 — same PR. Spec: [docs/features/user-scoped-tasks/SPEC.md](docs/features/user-scoped-tasks/SPEC.md). Per-user task isolation; admin sees `owner_email`; admin filter by user on Volumes/Tasks.
+
+### Volume file explorer UX redesign
+**Shipped:** 2026-07-02 — merged PR [#8](https://github.com/theo-henon/lcloud/pull/8). Tree + toolbar + list/grid + inline rename + drag-move + upload drop. ADR: [docs/adr/003-volume-explorer-file-ops.md](docs/adr/003-volume-explorer-file-ops.md). **Follow-up still open:** server-side layout prefs (see **Explorer grid — single-click vs double-click**).
+
+### Control panel iconography pass
+**Shipped:** 2026-07-02 — merged PR [#9](https://github.com/theo-henon/lcloud/pull/9). Spec: [docs/features/control-panel-iconography/SPEC.md](docs/features/control-panel-iconography/SPEC.md). Centralized Lucide maps — sidebar, actions, file MIME icons.
+
+### Multi-file upload with progress queue
+**Shipped:** 2026-07-02 — part of volume explorer PR #8. `UploadQueue` + parallel uploads (max 3), per-file progress/speed. Folder upload (`webkitdirectory`) not yet.
+
+### In-browser file preview (lightbox)
+**Shipped:** 2026-07-02 — part of volume explorer PR #8. `PreviewPanel` + `FileOpener` registry (image, PDF, text). Video/audio preview not yet.
 
 ---
 
@@ -410,7 +362,7 @@ Strategic shifts (new audience, new deployment model) → **VISION.md**, not IDE
 **Context:** OneDrive, Google Drive, Dropbox, and Nextcloud all move deleted files to a **Trash** first (recoverable for a period). lcloud **permanently deletes** on confirm (`DELETE /api/volumes/:id/files`) — no undo, no retention folder.
 **Value:** Recover from accidental deletes; matches user expectations from every major cloud.
 **Estimated effort:** Medium
-**Dependencies:** Phase 1.1 file ops; volume explorer redesign (Trash view in UI)
+**Dependencies:** Phase 1.1 file ops; Volume explorer (shipped) — Trash view in UI
 **Date:** 2026-07-02
 
 **Possible scope (post-MVP `/spec`):**
@@ -420,44 +372,16 @@ Strategic shifts (new audience, new deployment model) → **VISION.md**, not IDE
 
 ---
 
-### In-browser file preview (lightbox)
-**Context:** Drive and OneDrive open images, PDFs, and video in a **built-in viewer**; lcloud only shows a small list thumbnail or forces **download**.
-**Value:** Read and inspect files without leaving the browser or saving locally.
-**Estimated effort:** Medium
-**Dependencies:** Phase 1.1 file content + thumbnail API; iconography pass
-**Date:** 2026-07-02
-
-**Possible scope (post-MVP `/spec`):**
-- Lightbox/modal: images (full res), PDF (browser embed or pdf.js), video/audio (`<video>` / `<audio>`)
-- Open from grid view, list double-click, Spotlight result
-- Out of scope v1: Office editing, annotation, collaborative viewing
-
----
-
 ### Multi-file selection and bulk actions
 **Context:** All major clouds support **checkbox selection** and batch delete, download, move. lcloud acts on **one file at a time** in the UI.
-**Value:** Manage large folders efficiently; prerequisite for a credible explorer redesign.
+**Value:** Manage large folders efficiently.
 **Estimated effort:** Medium
-**Dependencies:** Volume explorer redesign; move/delete/download APIs (bulk endpoints or parallel calls)
+**Dependencies:** Volume explorer (shipped); move/delete/download APIs (bulk endpoints or parallel calls)
 **Date:** 2026-07-02
 
 **Possible scope (post-MVP `/spec`):**
 - Shift/Cmd-click, select all; toolbar: Delete, Download (zip if multiple), Move to folder
 - Backend: optional `POST /files/bulk-delete` for atomic quota updates
-
----
-
-### Multi-file upload with progress queue
-**Context:** Drive/OneDrive accept **many files and folders** in one drop with per-file progress bars. lcloud UI uploads **one file** per action (`files[0]` in `VolumeDetailPage`).
-**Value:** Everyday photo/document uploads without repeating the flow.
-**Estimated effort:** Medium
-**Dependencies:** Volume explorer redesign (drop target); existing `POST /files` per file
-**Date:** 2026-07-02
-
-**Possible scope (post-MVP `/spec`):**
-- Queue UI: progress per file, cancel, retry failed; concurrent uploads (limit 3–5)
-- Folder upload via `webkitdirectory` where supported
-- Out of scope v1: tus/resumable multipart for huge files (separate idea if needed)
 
 ---
 
@@ -474,7 +398,7 @@ Strategic shifts (new audience, new deployment model) → **VISION.md**, not IDE
 **Context:** Drive/OneDrive show a **Details** pane: size, dates, type, owner, checksum. lcloud exposes size/modified in table columns only; SHA256 is indexed but not shown in UI.
 **Value:** Inspect metadata without downloading; trust/verify files (hash display).
 **Estimated effort:** Quick
-**Dependencies:** Volume explorer redesign; existing metadata cache / Bleve index
+**Dependencies:** Volume explorer (shipped); existing metadata cache / Bleve index
 **Date:** 2026-07-02
 
 ---
@@ -506,7 +430,7 @@ Strategic shifts (new audience, new deployment model) → **VISION.md**, not IDE
 **Context:** Google Drive **Share with specific people** on the same tenant. lcloud: **one owner per volume**; admin sees all, user sees own — no grant access to a colleague's volume. Distinct from public links (out of scope per VISION).
 **Value:** Family/small team on one lcloud: share a « Photos » volume without duplicating data or making everyone admin.
 **Estimated effort:** Heavy
-**Dependencies:** User management UI; ACL model (volume_members join table); authorize all file/volume APIs
+**Dependencies:** User management UI (shipped); ACL model (volume_members join table); authorize all file/volume APIs
 **Date:** 2026-07-02
 
 **Product constraint:** sharing **within the instance only** (existing admin-provisioned accounts) — not anonymous public URLs.
@@ -525,7 +449,7 @@ Strategic shifts (new audience, new deployment model) → **VISION.md**, not IDE
 ---
 
 ### User profile — change own password
-**Context:** Every cloud has **Account → Security → change password**. lcloud: admin can reset via future Users UI; no **self-service** password change on Settings page.
+**Context:** Every cloud has **Account → Security → change password**. lcloud: admin can reset passwords from `/settings/users` (shipped); no **self-service** password change on Settings page.
 **Value:** Users rotate credentials without admin intervention.
 **Estimated effort:** Quick
 **Dependencies:** Auth service (`ChangePassword(current, new)`); Settings page UI

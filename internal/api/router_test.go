@@ -28,7 +28,7 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *auth.Service, *volume.Service,
 	dsn := "file:" + t.Name() + "?mode=memory&cache=private"
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&auth.User{}, &auth.RefreshToken{}, &volume.Volume{}, &settings.InstanceSettings{}, &plugin.Plugin{}, &plugin.PluginLogEntry{}, &task.Task{}, &task.TaskRun{}))
+	require.NoError(t, db.AutoMigrate(&auth.User{}, &auth.RefreshToken{}, &volume.Volume{}, &volume.VolumeDeletionRequest{}, &settings.InstanceSettings{}, &plugin.Plugin{}, &plugin.PluginLogEntry{}, &task.Task{}, &task.TaskRun{}))
 
 	service := auth.NewService(db, "01234567890123456789012345678901", 24, 7)
 	require.NoError(t, service.SeedAdmin("admin@example.com", "adminpass1"))
@@ -45,14 +45,14 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *auth.Service, *volume.Service,
 	diskRegistry := volume.NewDiskRegistry(cfg)
 	indexManager := indexer.NewIndexManager()
 	volumeService := volume.NewService(db, diskRegistry, indexManager)
-	monitoringService := monitoring.NewService(volumeService, diskRegistry, settingsService)
+	monitoringService := monitoring.NewService(volumeService, diskRegistry, service, settingsService)
 	fileService := volume.NewFileService(volumeService, indexManager, cfg.MaxUploadBytes, monitoringService.StatsCache())
 	pluginService := plugin.NewService(db, t.TempDir(), volumeService, nil)
 	volumeService.SetEventPublisher(pluginService.Publisher())
 	fileService.SetEventPublisher(pluginService.Publisher())
 	macroOps := volume.NewMacroOps(volumeService, indexManager, monitoringService.StatsCache(), pluginService.Publisher())
 	taskExecutor := task.NewExecutor(macroOps, monitoringService, volumeService, pluginService)
-	taskService := task.NewService(db, volumeService, taskExecutor, pluginService)
+	taskService := task.NewService(db, volumeService, service, taskExecutor, pluginService)
 
 	router := NewRouter(RouterConfig{
 		AuthService:       service,
@@ -207,6 +207,139 @@ func TestAdminCreateUser(t *testing.T) {
 	createRec := httptest.NewRecorder()
 	router.ServeHTTP(createRec, createReq)
 	require.Equal(t, http.StatusCreated, createRec.Code)
+}
+
+func TestAdminListUsers(t *testing.T) {
+	router, _ := setupTestRouterLegacy(t)
+
+	loginBody := []byte(`{"email":"admin@example.com","password":"adminpass1"}`)
+	loginReq := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(loginBody))
+	loginReq.Header.Set("Content-Type", "application/json")
+	loginRec := httptest.NewRecorder()
+	router.ServeHTTP(loginRec, loginReq)
+	require.Equal(t, http.StatusOK, loginRec.Code)
+
+	var loginResp auth.LoginResult
+	require.NoError(t, json.Unmarshal(loginRec.Body.Bytes(), &loginResp))
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/admin/users", nil)
+	listReq.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+	listRec := httptest.NewRecorder()
+	router.ServeHTTP(listRec, listReq)
+	require.Equal(t, http.StatusOK, listRec.Code)
+
+	var body struct {
+		Users []auth.UserResponse `json:"users"`
+	}
+	require.NoError(t, json.Unmarshal(listRec.Body.Bytes(), &body))
+	require.Len(t, body.Users, 1)
+	require.Equal(t, "admin@example.com", body.Users[0].Email)
+	require.Nil(t, body.Users[0].DisabledAt)
+}
+
+func TestAdminListUsersForbiddenForRegularUser(t *testing.T) {
+	router, service := setupTestRouterLegacy(t)
+
+	_, err := service.CreateUser("user@example.com", "password123", auth.RoleUser)
+	require.NoError(t, err)
+
+	login, err := service.Login("user@example.com", "password123")
+	require.NoError(t, err)
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/admin/users", nil)
+	listReq.Header.Set("Authorization", "Bearer "+login.AccessToken)
+	listRec := httptest.NewRecorder()
+	router.ServeHTTP(listRec, listReq)
+	require.Equal(t, http.StatusForbidden, listRec.Code)
+}
+
+func adminToken(t *testing.T, router *gin.Engine) string {
+	t.Helper()
+	loginBody := []byte(`{"email":"admin@example.com","password":"adminpass1"}`)
+	loginReq := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(loginBody))
+	loginReq.Header.Set("Content-Type", "application/json")
+	loginRec := httptest.NewRecorder()
+	router.ServeHTTP(loginRec, loginReq)
+	require.Equal(t, http.StatusOK, loginRec.Code)
+
+	var loginResp auth.LoginResult
+	require.NoError(t, json.Unmarshal(loginRec.Body.Bytes(), &loginResp))
+	return loginResp.AccessToken
+}
+
+func TestAdminPatchUserDisable(t *testing.T) {
+	router, service := setupTestRouterLegacy(t)
+
+	member, err := service.CreateUser("member@example.com", "password123", auth.RoleUser)
+	require.NoError(t, err)
+
+	token := adminToken(t, router)
+	patchBody := []byte(`{"disabled":true}`)
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/admin/users/"+member.ID.String(), bytes.NewReader(patchBody))
+	patchReq.Header.Set("Content-Type", "application/json")
+	patchReq.Header.Set("Authorization", "Bearer "+token)
+	patchRec := httptest.NewRecorder()
+	router.ServeHTTP(patchRec, patchReq)
+	require.Equal(t, http.StatusOK, patchRec.Code)
+
+	_, err = service.Login("member@example.com", "password123")
+	require.ErrorIs(t, err, auth.ErrUserDisabled)
+}
+
+func TestAdminPatchUserLastAdminForbidden(t *testing.T) {
+	router, service := setupTestRouterLegacy(t)
+
+	users, err := service.ListUsers()
+	require.NoError(t, err)
+	require.Len(t, users, 1)
+
+	token := adminToken(t, router)
+	patchBody := []byte(`{"disabled":true}`)
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/admin/users/"+users[0].ID.String(), bytes.NewReader(patchBody))
+	patchReq.Header.Set("Content-Type", "application/json")
+	patchReq.Header.Set("Authorization", "Bearer "+token)
+	patchRec := httptest.NewRecorder()
+	router.ServeHTTP(patchRec, patchReq)
+	require.Equal(t, http.StatusForbidden, patchRec.Code)
+}
+
+func TestAdminPatchUserPromoteRole(t *testing.T) {
+	router, service := setupTestRouterLegacy(t)
+
+	member, err := service.CreateUser("member@example.com", "password123", auth.RoleUser)
+	require.NoError(t, err)
+
+	token := adminToken(t, router)
+	patchBody := []byte(`{"role":"admin"}`)
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/admin/users/"+member.ID.String(), bytes.NewReader(patchBody))
+	patchReq.Header.Set("Content-Type", "application/json")
+	patchReq.Header.Set("Authorization", "Bearer "+token)
+	patchRec := httptest.NewRecorder()
+	router.ServeHTTP(patchRec, patchReq)
+	require.Equal(t, http.StatusOK, patchRec.Code)
+
+	updated, err := service.GetUserByID(member.ID)
+	require.NoError(t, err)
+	require.Equal(t, auth.RoleAdmin, updated.Role)
+}
+
+func TestAdminPatchUserResetPassword(t *testing.T) {
+	router, service := setupTestRouterLegacy(t)
+
+	member, err := service.CreateUser("member@example.com", "password123", auth.RoleUser)
+	require.NoError(t, err)
+
+	token := adminToken(t, router)
+	patchBody := []byte(`{"password":"newpassword1"}`)
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/admin/users/"+member.ID.String(), bytes.NewReader(patchBody))
+	patchReq.Header.Set("Content-Type", "application/json")
+	patchReq.Header.Set("Authorization", "Bearer "+token)
+	patchRec := httptest.NewRecorder()
+	router.ServeHTTP(patchRec, patchReq)
+	require.Equal(t, http.StatusOK, patchRec.Code)
+
+	_, err = service.Login("member@example.com", "newpassword1")
+	require.NoError(t, err)
 }
 
 func TestAdminPatchSettings(t *testing.T) {

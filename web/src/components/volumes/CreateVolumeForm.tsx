@@ -1,15 +1,26 @@
 import { useState } from "react";
+import type { DiskInfo, FilterMode } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { DiskInfo, FilterMode } from "@/lib/api";
-import { parseQuotaGB } from "@/lib/utils";
+import { formatBytes, parseQuotaGB } from "@/lib/utils";
+
+function diskOptionKey(disk: DiskInfo) {
+  return disk.path || disk.id;
+}
+
+function diskOptionLabel(disk: DiskInfo) {
+  const freeLabel = formatBytes(disk.free_bytes);
+  const totalLabel = formatBytes(disk.total_bytes);
+  return `${disk.label} — ${freeLabel} free of ${totalLabel}`;
+}
 
 type CreateVolumeFormProps = {
   disks: DiskInfo[];
   loading?: boolean;
   onSubmit: (values: {
     name: string;
-    disk_path: string;
+    disk_path?: string;
+    disk_id?: string;
     quota_bytes: number;
     filters: { mode: FilterMode | ""; extensions: string[] };
   }) => void;
@@ -23,16 +34,22 @@ export function CreateVolumeForm({
   onCancel,
 }: CreateVolumeFormProps) {
   const [name, setName] = useState("");
-  const [diskPath, setDiskPath] = useState(disks[0]?.path ?? "");
+  const [diskKey, setDiskKey] = useState(diskOptionKey(disks[0] ?? { id: "", path: "", name: "", label: "", total_bytes: 0, free_bytes: 0 }));
   const [quotaGB, setQuotaGB] = useState("");
   const [filterMode, setFilterMode] = useState<FilterMode>("allow");
   const [extensions, setExtensions] = useState("");
+
+  const selectedDisk = disks.find((disk) => diskOptionKey(disk) === diskKey);
 
   return (
     <form
       className="space-y-4"
       onSubmit={(event) => {
         event.preventDefault();
+        if (!selectedDisk) {
+          return;
+        }
+
         const normalizedExtensions = extensions
           .split(/[\s,]+/)
           .map((item) => item.trim())
@@ -41,7 +58,8 @@ export function CreateVolumeForm({
 
         onSubmit({
           name: name.trim(),
-          disk_path: diskPath,
+          disk_path: selectedDisk.path || undefined,
+          disk_id: selectedDisk.path ? undefined : selectedDisk.id,
           quota_bytes: parseQuotaGB(quotaGB),
           filters:
             normalizedExtensions.length === 0
@@ -65,18 +83,18 @@ export function CreateVolumeForm({
 
       <div className="space-y-2">
         <label className="text-sm font-medium text-body-strong" htmlFor="volume-disk">
-          Disk
+          Storage
         </label>
         <select
           id="volume-disk"
           className="flex h-10 w-full rounded-md border border-hairline bg-surface-soft px-3 text-sm text-ink"
-          value={diskPath}
-          onChange={(event) => setDiskPath(event.target.value)}
+          value={diskKey}
+          onChange={(event) => setDiskKey(event.target.value)}
           required
         >
           {disks.map((disk) => (
-            <option key={disk.path} value={disk.path}>
-              {disk.label} — {Math.round((disk.free_bytes / disk.total_bytes) * 100 || 0)}% free
+            <option key={diskOptionKey(disk)} value={diskOptionKey(disk)}>
+              {diskOptionLabel(disk)}
             </option>
           ))}
         </select>
@@ -129,7 +147,7 @@ export function CreateVolumeForm({
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" disabled={loading || !name.trim() || !diskPath}>
+        <Button type="submit" disabled={loading || !name.trim() || !selectedDisk}>
           {loading ? "Creating..." : "Create volume"}
         </Button>
       </div>

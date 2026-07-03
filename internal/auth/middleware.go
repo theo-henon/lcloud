@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -24,6 +25,19 @@ func AuthMiddleware(service *Service) gin.HandlerFunc {
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"error": "invalid or expired access token",
+				"code":  "UNAUTHORIZED",
+			})
+			return
+		}
+
+		claims, err = service.ResolveClaims(claims)
+		if err != nil {
+			message := "invalid or expired access token"
+			if errors.Is(err, ErrUserDisabled) {
+				message = "account disabled"
+			}
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"error": message,
 				"code":  "UNAUTHORIZED",
 			})
 			return

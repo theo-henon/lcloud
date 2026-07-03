@@ -46,6 +46,8 @@ STORAGE_DISK_LABELS=SSD,HDD 1,HDD 2
 MAX_UPLOAD_BYTES=104857600
 ```
 
+`ADMIN_EMAIL` and `ADMIN_PASSWORD` bootstrap the **first** admin account only, when the `users` table is empty (first startup). Changing them later does not update or recreate accounts — manage users from **Settings → Users** after that.
+
 ### Multi-disk setup
 
 Each physical disk is mounted independently into the Docker container. Example from `.env.example`:

@@ -16,19 +16,21 @@ type Service struct {
 	metadata *volume.MetadataCache
 	cache    *StatsCache
 	settings SettingsReader
+	auth     *auth.Service
 }
 
 type SettingsReader interface {
 	ShouldMaskFor(claims *auth.Claims) (bool, error)
 }
 
-func NewService(volumes *volume.Service, disks *volume.DiskRegistry, settings SettingsReader) *Service {
+func NewService(volumes *volume.Service, disks *volume.DiskRegistry, authService *auth.Service, settings SettingsReader) *Service {
 	return &Service{
 		volumes:  volumes,
 		disks:    disks,
 		metadata: volume.NewMetadataCache(),
 		cache:    NewStatsCache(),
 		settings: settings,
+		auth:     authService,
 	}
 }
 
@@ -40,7 +42,7 @@ func (s *Service) GetOverview(ctx context.Context, claims *auth.Claims) (*Overvi
 	_ = ctx
 
 	disks := s.disks.ListDisks()
-	volumes, err := s.volumes.List(claims)
+	volumes, err := s.volumes.List(claims, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -65,11 +67,26 @@ func (s *Service) GetOverview(ctx context.Context, claims *auth.Claims) (*Overvi
 		})
 	}
 
+	var ownerEmails map[uuid.UUID]string
+	if claims.Role == auth.RoleAdmin {
+		ownerIDs := make([]uuid.UUID, len(volumes))
+		for i := range volumes {
+			ownerIDs[i] = volumes[i].OwnerID
+		}
+		ownerEmails, err = s.auth.EmailsByIDs(ownerIDs)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	summaries := make([]VolumeSummary, 0, len(volumes))
 	for i := range volumes {
 		summary, err := s.volumeSummary(&volumes[i])
 		if err != nil {
 			return nil, err
+		}
+		if ownerEmails != nil {
+			summary.OwnerEmail = ownerEmails[volumes[i].OwnerID]
 		}
 		summaries = append(summaries, *summary)
 	}

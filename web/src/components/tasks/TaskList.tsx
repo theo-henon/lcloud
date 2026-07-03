@@ -1,4 +1,5 @@
 import type { TaskRecord } from "@/lib/api";
+import { User } from "lucide-react";
 import { macroLabel } from "@/components/tasks/MacroParameterFields";
 import { TaskRunStatusBadge } from "@/components/tasks/TaskRunStatusBadge";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,7 @@ import { ActionIcon, navIcons } from "@/lib/icons";
 
 type TaskListProps = {
   tasks: TaskRecord[];
+  isAdmin: boolean;
   selectedId: string | null;
   onSelect: (id: string) => void;
   onEdit: (task: TaskRecord) => void;
@@ -42,7 +44,7 @@ function EnableToggle({
   );
 }
 
-export function TaskList({ tasks, selectedId, onSelect, onEdit }: TaskListProps) {
+export function TaskList({ tasks, isAdmin, selectedId, onSelect, onEdit }: TaskListProps) {
   const runTask = useRunTask();
   const updateTask = useUpdateTask();
   const deleteTask = useDeleteTask();
@@ -52,7 +54,11 @@ export function TaskList({ tasks, selectedId, onSelect, onEdit }: TaskListProps)
     return (
       <Card className="flex flex-col items-center gap-3 p-8 text-center text-sm text-muted">
         {EmptyIcon ? <EmptyIcon className="h-8 w-8 text-muted" aria-hidden /> : null}
-        <p>No tasks yet — create one to automate volume maintenance.</p>
+        <p>
+          {isAdmin
+            ? "No tasks on this instance yet."
+            : "No tasks yet — create one on your volumes."}
+        </p>
       </Card>
     );
   }
@@ -74,8 +80,20 @@ export function TaskList({ tasks, selectedId, onSelect, onEdit }: TaskListProps)
               </div>
               <p className="mt-1 text-sm text-body">
                 {macroLabel(task.macro)}
-                {task.volume_name ? ` · ${task.volume_name}` : task.scope === "global" ? " · All volumes" : ""}
+                {task.volume_name
+                  ? ` · ${task.volume_name}`
+                  : task.scope === "global"
+                    ? " · Instance-wide"
+                    : ""}
               </p>
+              {isAdmin && task.owner_email ? (
+                <p className="mt-1 flex items-center gap-1.5 text-sm text-muted">
+                  <User className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <span>
+                    Created by <span className="text-body">{task.owner_email}</span>
+                  </span>
+                </p>
+              ) : null}
               <p className="mt-1 font-mono text-xs text-muted">
                 {task.schedule_description}
                 {task.next_run_at ? ` · next ${new Date(task.next_run_at).toLocaleString()} UTC` : ""}

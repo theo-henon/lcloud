@@ -16,6 +16,7 @@ import (
 type CreateVolumeInput struct {
 	Name       string
 	DiskPath   string
+	DiskID     string
 	QuotaBytes int64
 	Filters    Filters
 }
@@ -45,10 +46,12 @@ func (s *Service) SetEventPublisher(events EventPublisher) {
 	s.events = events
 }
 
-func (s *Service) List(claims *auth.Claims) ([]Volume, error) {
+func (s *Service) List(claims *auth.Claims, ownerID *uuid.UUID) ([]Volume, error) {
 	query := s.db.Order("created_at desc")
 	if claims.Role != auth.RoleAdmin {
 		query = query.Where("owner_id = ?", claims.UserID)
+	} else if ownerID != nil {
+		query = query.Where("owner_id = ?", *ownerID)
 	}
 
 	var volumes []Volume
@@ -82,8 +85,9 @@ func (s *Service) ListAll() ([]Volume, error) {
 }
 
 func (s *Service) Create(claims *auth.Claims, input CreateVolumeInput) (*Volume, error) {
-	if !s.disks.IsRegistered(input.DiskPath) {
-		return nil, ErrDiskNotFound
+	diskPath, err := s.resolveCreateDiskPath(input.DiskPath, input.DiskID)
+	if err != nil {
+		return nil, err
 	}
 
 	filters := NormalizeFilters(input.Filters)
@@ -102,7 +106,7 @@ func (s *Service) Create(claims *auth.Claims, input CreateVolumeInput) (*Volume,
 	}
 
 	id := uuid.New()
-	rootPath := filepath.Join(input.DiskPath, id.String())
+	rootPath := filepath.Join(diskPath, id.String())
 	if err := createVolumeLayout(rootPath); err != nil {
 		return nil, fmt.Errorf("create volume layout: %w", err)
 	}
@@ -116,7 +120,7 @@ func (s *Service) Create(claims *auth.Claims, input CreateVolumeInput) (*Volume,
 		Filters:    filters,
 		Encryption: EncryptionConfig{Enabled: false, Method: nil},
 		CreatedAt:  now,
-		DiskPath:   input.DiskPath,
+		DiskPath:   diskPath,
 		UsedBytes:  0,
 	}
 	if err := WriteVolumeConfig(rootPath, cfg); err != nil {
@@ -189,6 +193,10 @@ func (s *Service) Patch(claims *auth.Claims, id uuid.UUID, input PatchVolumeInpu
 }
 
 func (s *Service) Delete(claims *auth.Claims, id uuid.UUID, force bool) error {
+	if claims.Role != auth.RoleAdmin {
+		return ErrForbidden
+	}
+
 	vol, err := s.findVolume(id)
 	if err != nil {
 		return err
@@ -222,7 +230,25 @@ func (s *Service) Delete(claims *auth.Claims, id uuid.UUID, force bool) error {
 			Name:     vol.Name,
 		})
 	}
+	_ = s.dismissDeletionRequestsForVolume(vol.ID)
 	return nil
+}
+
+func (s *Service) resolveCreateDiskPath(diskPath, diskID string) (string, error) {
+	if diskPath != "" {
+		if s.disks.IsRegistered(diskPath) {
+			return diskPath, nil
+		}
+		return "", ErrDiskNotFound
+	}
+	if diskID != "" {
+		resolved, ok := s.disks.ResolvePathByID(diskID)
+		if !ok || !s.disks.IsRegistered(resolved) {
+			return "", ErrDiskNotFound
+		}
+		return resolved, nil
+	}
+	return "", ErrDiskNotFound
 }
 
 func (s *Service) findVolume(id uuid.UUID) (*Volume, error) {
@@ -254,4 +280,83 @@ func (s *Service) syncUsage(vol *Volume, usedBytes int64) error {
 		return err
 	}
 	return s.db.Model(vol).Update("used_bytes", usedBytes).Error
+}
+
+func (s *Service) RequestDeletion(claims *auth.Claims, volumeID uuid.UUID) error {
+	vol, err := s.findVolume(volumeID)
+	if err != nil {
+		return err
+	}
+	if vol.OwnerID != claims.UserID {
+		return ErrForbidden
+	}
+
+	var existing int64
+	if err := s.db.Model(&VolumeDeletionRequest{}).
+		Where("volume_id = ? AND status = ?", volumeID, DeletionRequestPending).
+		Count(&existing).Error; err != nil {
+		return err
+	}
+	if existing > 0 {
+		return ErrDeletionRequestExists
+	}
+
+	req := &VolumeDeletionRequest{
+		ID:       uuid.New(),
+		VolumeID: volumeID,
+		UserID:   claims.UserID,
+		Status:   DeletionRequestPending,
+	}
+	return s.db.Create(req).Error
+}
+
+func (s *Service) ListPendingDeletionRequests() ([]DeletionRequestResponse, error) {
+	var results []DeletionRequestResponse
+	err := s.db.Table("volume_deletion_requests AS r").
+		Select("r.id, r.volume_id, v.name AS volume_name, r.user_id, u.email AS user_email, r.created_at").
+		Joins("JOIN volumes v ON v.id = r.volume_id").
+		Joins("JOIN users u ON u.id = r.user_id").
+		Where("r.status = ?", DeletionRequestPending).
+		Order("r.created_at ASC").
+		Scan(&results).Error
+	return results, err
+}
+
+func (s *Service) DismissDeletionRequest(id uuid.UUID) error {
+	var req VolumeDeletionRequest
+	if err := s.db.First(&req, "id = ?", id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrDeletionRequestNotFound
+		}
+		return err
+	}
+	if req.Status != DeletionRequestPending {
+		return ErrDeletionRequestNotFound
+	}
+	now := time.Now()
+	req.Status = DeletionRequestDismissed
+	req.DismissedAt = &now
+	return s.db.Save(&req).Error
+}
+
+func (s *Service) PendingDeletionVolumeIDs(userID uuid.UUID) (map[uuid.UUID]bool, error) {
+	var rows []VolumeDeletionRequest
+	if err := s.db.Where("user_id = ? AND status = ?", userID, DeletionRequestPending).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make(map[uuid.UUID]bool, len(rows))
+	for _, row := range rows {
+		out[row.VolumeID] = true
+	}
+	return out, nil
+}
+
+func (s *Service) dismissDeletionRequestsForVolume(volumeID uuid.UUID) error {
+	now := time.Now()
+	return s.db.Model(&VolumeDeletionRequest{}).
+		Where("volume_id = ? AND status = ?", volumeID, DeletionRequestPending).
+		Updates(map[string]any{
+			"status":       DeletionRequestDismissed,
+			"dismissed_at": now,
+		}).Error
 }

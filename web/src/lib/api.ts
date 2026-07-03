@@ -1,5 +1,17 @@
 export type UserRole = "admin" | "user";
 
+export type CreateAdminUserInput = {
+  email: string;
+  password: string;
+  role?: UserRole;
+};
+
+export type PatchAdminUserInput = {
+  role?: UserRole;
+  disabled?: boolean;
+  password?: string;
+};
+
 export type PluginStatus = "running" | "stopped" | "error";
 
 export interface PluginRecord {
@@ -29,6 +41,7 @@ export interface User {
   email: string;
   role: UserRole;
   created_at: string;
+  disabled_at: string | null;
 }
 
 export type FilterMode = "allow" | "block";
@@ -39,6 +52,7 @@ export interface VolumeFilters {
 }
 
 export interface DiskInfo {
+  id: string;
   path: string;
   name: string;
   label: string;
@@ -50,6 +64,7 @@ export interface Volume {
   id: string;
   name: string;
   owner_id: string;
+  owner_email?: string;
   disk_path: string;
   root_path: string;
   quota_bytes: number;
@@ -57,6 +72,7 @@ export interface Volume {
   filters: VolumeFilters;
   created_at: string;
   updated_at: string;
+  deletion_request_pending?: boolean;
 }
 
 export interface FileEntry {
@@ -76,9 +92,19 @@ export interface DirectoryListing {
 
 export interface CreateVolumeInput {
   name: string;
-  disk_path: string;
+  disk_path?: string;
+  disk_id?: string;
   quota_bytes: number;
   filters: VolumeFilters;
+}
+
+export interface VolumeDeletionRequest {
+  id: string;
+  volume_id: string;
+  volume_name: string;
+  user_id: string;
+  user_email: string;
+  created_at: string;
 }
 
 export interface PatchVolumeInput {
@@ -104,6 +130,7 @@ export interface MimeBreakdown {
 export interface VolumeSummary {
   id: string;
   name: string;
+  owner_email?: string;
   disk_path: string;
   quota_bytes: number;
   used_bytes: number;
@@ -188,6 +215,7 @@ export type TaskRunStatus = "success" | "failed" | "skipped" | "dry_run";
 export interface TaskRecord {
   id: string;
   owner_id: string;
+  owner_email?: string;
   name: string;
   macro: string;
   scope: TaskScope;
@@ -401,11 +429,31 @@ export const api = {
   me() {
     return apiRequest<User>("/api/auth/me");
   },
+  listAdminUsers() {
+    return apiRequest<{ users: User[] }>("/api/admin/users");
+  },
+  createAdminUser(input: CreateAdminUserInput) {
+    return apiRequest<User>("/api/admin/users", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+  patchAdminUser(id: string, input: PatchAdminUserInput) {
+    return apiRequest<User>(`/api/admin/users/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    });
+  },
   listDisks() {
     return apiRequest<{ disks: DiskInfo[] }>("/api/disks");
   },
-  listVolumes() {
-    return apiRequest<{ volumes: Volume[] }>("/api/volumes");
+  listVolumes(ownerId?: string) {
+    const params = new URLSearchParams();
+    if (ownerId) {
+      params.set("owner_id", ownerId);
+    }
+    const query = params.toString() ? `?${params.toString()}` : "";
+    return apiRequest<{ volumes: Volume[] }>(`/api/volumes${query}`);
   },
   getVolume(id: string) {
     return apiRequest<Volume>(`/api/volumes/${id}`);
@@ -425,6 +473,21 @@ export const api = {
   deleteVolume(id: string, force = false) {
     const query = force ? "?force=true" : "";
     return apiRequest<void>(`/api/volumes/${id}${query}`, { method: "DELETE" });
+  },
+  requestVolumeDeletion(id: string) {
+    return apiRequest<{ status: string }>(`/api/volumes/${id}/deletion-request`, {
+      method: "POST",
+    });
+  },
+  listVolumeDeletionRequests() {
+    return apiRequest<{ requests: VolumeDeletionRequest[] }>(
+      "/api/admin/volume-deletion-requests",
+    );
+  },
+  dismissVolumeDeletionRequest(id: string) {
+    return apiRequest<void>(`/api/admin/volume-deletion-requests/${id}`, {
+      method: "DELETE",
+    });
   },
   listFiles(volumeId: string, path = ".") {
     const params = new URLSearchParams({ path });
@@ -548,8 +611,15 @@ export const api = {
       body: JSON.stringify(input),
     });
   },
-  listTasks(volumeId?: string) {
-    const query = volumeId ? `?volume_id=${encodeURIComponent(volumeId)}` : "";
+  listTasks(filters?: { volumeId?: string; ownerId?: string }) {
+    const params = new URLSearchParams();
+    if (filters?.volumeId) {
+      params.set("volume_id", filters.volumeId);
+    }
+    if (filters?.ownerId) {
+      params.set("owner_id", filters.ownerId);
+    }
+    const query = params.toString() ? `?${params.toString()}` : "";
     return apiRequest<{ tasks: TaskRecord[] }>(`/api/tasks${query}`);
   },
   getTask(id: string) {

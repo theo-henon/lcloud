@@ -6,7 +6,7 @@ import { DashboardPage } from "@/pages/DashboardPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { MonitoringPage } from "@/pages/MonitoringPage";
-import { PlaceholderPage } from "@/pages/PlaceholderPage";
+import { UsersPage } from "@/pages/UsersPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { PluginsPage } from "@/pages/PluginsPage";
 import { TasksPage } from "@/pages/TasksPage";
@@ -36,16 +36,7 @@ function AppRoutes() {
           <Route path="/tasks" element={<TasksPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route element={<AdminRoute />}>
-            <Route
-              path="/settings/users"
-              element={
-                <PlaceholderPage
-                  title="Users"
-                  phase="Phase 0 — API only"
-                  description="User management UI arrives later. Admin API is available now."
-                />
-              }
-            />
+            <Route path="/settings/users" element={<UsersPage />} />
           </Route>
           <Route path="*" element={<NotFoundPage />} />
         </Route>

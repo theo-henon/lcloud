@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/theo-henon/lcloud/internal/auth"
 	"github.com/theo-henon/lcloud/internal/indexer"
 	"github.com/theo-henon/lcloud/internal/monitoring"
@@ -53,6 +54,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			httputil.Unauthorized(c, "invalid credentials")
 			return
 		}
+		if errors.Is(err, auth.ErrUserDisabled) {
+			httputil.Unauthorized(c, "account disabled")
+			return
+		}
 		httputil.InternalError(c, "unable to login")
 		return
 	}
@@ -71,6 +76,10 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, auth.ErrInvalidToken) || errors.Is(err, auth.ErrExpiredToken) || errors.Is(err, auth.ErrRevokedToken) {
 			httputil.Unauthorized(c, "invalid refresh token")
+			return
+		}
+		if errors.Is(err, auth.ErrUserDisabled) {
+			httputil.Unauthorized(c, "account disabled")
 			return
 		}
 		httputil.InternalError(c, "unable to refresh token")
@@ -153,6 +162,64 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 	httputil.JSON(c, http.StatusCreated, auth.ToUserResponse(user))
 }
 
+func (h *AdminHandler) ListUsers(c *gin.Context) {
+	users, err := h.auth.ListUsers()
+	if err != nil {
+		httputil.InternalError(c, "unable to list users")
+		return
+	}
+
+	httputil.JSON(c, http.StatusOK, gin.H{"users": users})
+}
+
+type patchUserRequest struct {
+	Role     *auth.Role `json:"role"`
+	Disabled *bool      `json:"disabled"`
+	Password *string    `json:"password" binding:"omitempty,min=8"`
+}
+
+func (h *AdminHandler) PatchUser(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httputil.BadRequest(c, "invalid user id")
+		return
+	}
+
+	var req patchUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httputil.BadRequest(c, "invalid request body")
+		return
+	}
+
+	if req.Role == nil && req.Disabled == nil && req.Password == nil {
+		httputil.BadRequest(c, "at least one field required")
+		return
+	}
+
+	user, err := h.auth.PatchUser(id, auth.PatchUserInput{
+		Role:     req.Role,
+		Disabled: req.Disabled,
+		Password: req.Password,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, auth.ErrUserNotFound):
+			httputil.Error(c, http.StatusNotFound, "NOT_FOUND", "user not found")
+		case errors.Is(err, auth.ErrLastAdmin):
+			httputil.Forbidden(c, "cannot modify last admin")
+		case errors.Is(err, auth.ErrInvalidRole):
+			httputil.BadRequest(c, "role must be admin or user")
+		case errors.Is(err, auth.ErrInvalidPassword):
+			httputil.BadRequest(c, "password must be at least 8 characters")
+		default:
+			httputil.InternalError(c, "unable to update user")
+		}
+		return
+	}
+
+	httputil.JSON(c, http.StatusOK, auth.ToUserResponse(user))
+}
+
 type RouterConfig struct {
 	AuthService       *auth.Service
 	DiskRegistry      *volume.DiskRegistry
@@ -183,7 +250,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	authHandler := NewAuthHandler(cfg.AuthService)
 	adminHandler := NewAdminHandler(cfg.AuthService)
 	diskHandler := NewDiskHandler(cfg.DiskRegistry, cfg.SettingsService)
-	volumeHandler := NewVolumeHandler(cfg.VolumeService, cfg.SettingsService)
+	volumeHandler := NewVolumeHandler(cfg.VolumeService, cfg.SettingsService, cfg.AuthService)
 	fileHandler := NewFileHandler(cfg.FileService)
 	monitoringHandler := NewMonitoringHandler(cfg.MonitoringService)
 	searchHandler := NewSearchHandler(cfg.VolumeService, cfg.IndexManager)
@@ -208,8 +275,12 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 
 		admin := api.Group("/admin", auth.AuthMiddleware(cfg.AuthService), auth.RequireAdmin())
 		{
+			admin.GET("/users", adminHandler.ListUsers)
 			admin.POST("/users", adminHandler.CreateUser)
+			admin.PATCH("/users/:id", adminHandler.PatchUser)
 			admin.PATCH("/settings", adminSettingsHandler.Patch)
+			admin.GET("/volume-deletion-requests", volumeHandler.ListDeletionRequests)
+			admin.DELETE("/volume-deletion-requests/:id", volumeHandler.DismissDeletionRequest)
 		}
 
 		protected := api.Group("", auth.AuthMiddleware(cfg.AuthService))
@@ -219,10 +290,11 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			protected.GET("/search", searchHandler.SearchAll)
 
 			protected.GET("/volumes", volumeHandler.List)
-			protected.POST("/volumes", auth.RequireAdmin(), volumeHandler.Create)
+			protected.POST("/volumes", volumeHandler.Create)
 			protected.GET("/volumes/:id", volumeHandler.Get)
 			protected.PATCH("/volumes/:id", volumeHandler.Patch)
 			protected.DELETE("/volumes/:id", volumeHandler.Delete)
+			protected.POST("/volumes/:id/deletion-request", volumeHandler.RequestDeletion)
 
 			protected.GET("/volumes/:id/files", fileHandler.List)
 			protected.POST("/volumes/:id/files/directories", fileHandler.CreateDirectory)
