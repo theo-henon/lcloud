@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { X } from "lucide-react";
-import { useNotifications } from "@/hooks/useNotifications";
+import { useNotificationMutations } from "@/hooks/useNotifications";
 import { useToastStore, type ToastItem } from "@/store/toast";
 import { cn } from "@/lib/utils";
 
@@ -19,7 +19,7 @@ export function ToastHost() {
   const navigate = useNavigate();
   const items = useToastStore((state) => state.items);
   const dismiss = useToastStore((state) => state.dismiss);
-  const { markRead } = useNotifications();
+  const { markRead } = useNotificationMutations();
 
   const handleClick = (item: ToastItem) => {
     markRead.mutate(item.notificationId);

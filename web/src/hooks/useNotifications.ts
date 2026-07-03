@@ -1,51 +1,17 @@
-import { useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type NotificationRecord } from "@/lib/api";
-import { useToastStore } from "@/store/toast";
 
 const POLL_INTERVAL_MS = 30_000;
 
-export function useNotifications() {
+function useInvalidateNotifications() {
   const queryClient = useQueryClient();
-  const pushToast = useToastStore((state) => state.pushFromNotification);
-  const sessionBaselineIds = useRef<Set<string> | null>(null);
-
-  const notificationsQuery = useQuery({
-    queryKey: ["notifications"],
-    queryFn: () => api.listNotifications({ limit: 30 }),
-    refetchInterval: POLL_INTERVAL_MS,
-    refetchOnWindowFocus: true,
-  });
-
-  const unreadQuery = useQuery({
-    queryKey: ["notifications", "unread-count"],
-    queryFn: () => api.getNotificationUnreadCount(),
-    refetchInterval: POLL_INTERVAL_MS,
-    refetchOnWindowFocus: true,
-  });
-
-  useEffect(() => {
-    const items = notificationsQuery.data?.notifications;
-    if (!items) {
-      return;
-    }
-
-    if (sessionBaselineIds.current === null) {
-      sessionBaselineIds.current = new Set(items.map((item) => item.id));
-      return;
-    }
-
-    for (const item of items) {
-      if (!item.read_at && !sessionBaselineIds.current.has(item.id)) {
-        sessionBaselineIds.current.add(item.id);
-        pushToast(item);
-      }
-    }
-  }, [notificationsQuery.data, pushToast]);
-
-  const invalidate = () => {
+  return () => {
     void queryClient.invalidateQueries({ queryKey: ["notifications"] });
   };
+}
+
+export function useNotificationMutations() {
+  const invalidate = useInvalidateNotifications();
 
   const markRead = useMutation({
     mutationFn: (id: string) => api.markNotificationRead(id),
@@ -60,6 +26,26 @@ export function useNotifications() {
   const dismiss = useMutation({
     mutationFn: (id: string) => api.dismissNotification(id),
     onSuccess: invalidate,
+  });
+
+  return { markRead, markAllRead, dismiss };
+}
+
+export function useNotifications() {
+  const { markRead, markAllRead, dismiss } = useNotificationMutations();
+
+  const notificationsQuery = useQuery({
+    queryKey: ["notifications"],
+    queryFn: () => api.listNotifications({ limit: 30 }),
+    refetchInterval: POLL_INTERVAL_MS,
+    refetchOnWindowFocus: true,
+  });
+
+  const unreadQuery = useQuery({
+    queryKey: ["notifications", "unread-count"],
+    queryFn: () => api.getNotificationUnreadCount(),
+    refetchInterval: POLL_INTERVAL_MS,
+    refetchOnWindowFocus: true,
   });
 
   return {
