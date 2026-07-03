@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/theo-henon/lcloud/internal/auth"
 	"github.com/theo-henon/lcloud/internal/config"
+	"github.com/theo-henon/lcloud/internal/dashboard"
 	"github.com/theo-henon/lcloud/internal/indexer"
 	"github.com/theo-henon/lcloud/internal/monitoring"
 	"github.com/theo-henon/lcloud/internal/plugin"
@@ -52,6 +53,7 @@ func setupPluginRouter(t *testing.T) (*gin.Engine, string) {
 	macroOps := volume.NewMacroOps(volumeService, indexManager, monitoringService.StatsCache(), pluginService.Publisher())
 	taskExecutor := task.NewExecutor(macroOps, monitoringService, volumeService, pluginService)
 	taskService := task.NewService(db, volumeService, service, taskExecutor, pluginService)
+	dashboardService := dashboard.NewService(db)
 
 	router := NewRouter(RouterConfig{
 		AuthService:       service,
@@ -60,6 +62,7 @@ func setupPluginRouter(t *testing.T) (*gin.Engine, string) {
 		FileService:       fileService,
 		MonitoringService: monitoringService,
 		SettingsService:   settingsService,
+		DashboardService:  dashboardService,
 		PluginService:     pluginService,
 		TaskService:       taskService,
 		IndexManager:      indexManager,

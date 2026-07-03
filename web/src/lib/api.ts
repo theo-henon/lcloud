@@ -689,6 +689,23 @@ export const api = {
       `/api/tasks/${id}/runs?limit=${limit}`,
     );
   },
+  getDashboardLayout() {
+    return apiRequest<import("@/lib/dashboard/types").DashboardResponse>(
+      "/api/users/me/dashboard",
+    );
+  },
+  patchDashboardLayout(input: import("@/lib/dashboard/types").PatchDashboardInput) {
+    return apiRequest<import("@/lib/dashboard/types").DashboardResponse>(
+      "/api/users/me/dashboard",
+      {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      },
+    );
+  },
+  resetDashboardLayout() {
+    return apiRequest<void>("/api/users/me/dashboard", { method: "DELETE" });
+  },
 };
 
 function buildSearchQuery(params: SearchParams): string {
