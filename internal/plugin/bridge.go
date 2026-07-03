@@ -22,6 +22,14 @@ func (b *EventBridge) FileDeleted(ctx context.Context, event volume.FileDeletedE
 	b.bus.Publish(ctx, FromFileDeleted(event))
 }
 
+func (b *EventBridge) FileTrashed(ctx context.Context, event volume.FileTrashedEvent) {
+	b.bus.Publish(ctx, FromFileTrashed(event))
+}
+
+func (b *EventBridge) FileRestored(ctx context.Context, event volume.FileRestoredEvent) {
+	b.bus.Publish(ctx, FromFileRestored(event))
+}
+
 func (b *EventBridge) FileMoved(ctx context.Context, event volume.FileMovedEvent) {
 	b.bus.Publish(ctx, FromFileMoved(event))
 }

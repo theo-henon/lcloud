@@ -18,6 +18,7 @@ const (
 	MetadataDir       = "metadata"
 	PluginsDir        = "plugins"
 	LogsDir           = "logs"
+	TrashDir          = ".trash"
 )
 
 type FilterMode string

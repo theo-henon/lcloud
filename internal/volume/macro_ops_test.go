@@ -18,6 +18,8 @@ type noopPublisher struct{}
 
 func (noopPublisher) FileUploaded(context.Context, FileUploadedEvent)   {}
 func (noopPublisher) FileDeleted(context.Context, FileDeletedEvent)     {}
+func (noopPublisher) FileTrashed(context.Context, FileTrashedEvent)     {}
+func (noopPublisher) FileRestored(context.Context, FileRestoredEvent)   {}
 func (noopPublisher) FileMoved(context.Context, FileMovedEvent)         {}
 func (noopPublisher) FileRenamed(context.Context, FileRenamedEvent)   {}
 func (noopPublisher) VolumeCreated(context.Context, VolumeCreatedEvent) {}

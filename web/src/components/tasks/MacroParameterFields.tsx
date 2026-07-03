@@ -4,6 +4,7 @@ export const MACRO_GROUPS = [
     macros: [
       { id: "delete_old_files", label: "Delete old files" },
       { id: "delete_large_files", label: "Delete large files" },
+      { id: "purge_trash", label: "Purge trash" },
       { id: "clear_cache", label: "Clear cache" },
     ],
   },
@@ -35,6 +36,7 @@ export const DESTRUCTIVE_MACROS = new Set([
   "move_files",
   "sort_by_type",
   "sort_by_date",
+  "purge_trash",
 ]);
 
 export const GLOBAL_MACROS = new Set(["rebuild_index", "compute_stats", "alert_usage"]);
@@ -67,7 +69,7 @@ export function MacroParameterFields({
 
   return (
     <div className="space-y-4">
-      {macro === "delete_old_files" ? (
+      {macro === "delete_old_files" || macro === "purge_trash" ? (
         <>
           <label className="block space-y-1 text-sm">
             <span className="text-muted">Days</span>

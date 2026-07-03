@@ -2,6 +2,7 @@ package volume
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -18,6 +19,21 @@ type FileUploadedEvent struct {
 type FileDeletedEvent struct {
 	VolumeID     uuid.UUID
 	RelativePath string
+	SizeBytes    int64
+}
+
+type FileTrashedEvent struct {
+	VolumeID     uuid.UUID
+	FileID       string
+	OriginalPath string
+	SizeBytes    int64
+	DeletedAt    time.Time
+}
+
+type FileRestoredEvent struct {
+	VolumeID     uuid.UUID
+	FileID       string
+	RestoredPath string
 	SizeBytes    int64
 }
 
@@ -51,6 +67,8 @@ type VolumeDeletedEvent struct {
 type EventPublisher interface {
 	FileUploaded(ctx context.Context, event FileUploadedEvent)
 	FileDeleted(ctx context.Context, event FileDeletedEvent)
+	FileTrashed(ctx context.Context, event FileTrashedEvent)
+	FileRestored(ctx context.Context, event FileRestoredEvent)
 	FileMoved(ctx context.Context, event FileMovedEvent)
 	FileRenamed(ctx context.Context, event FileRenamedEvent)
 	VolumeCreated(ctx context.Context, event VolumeCreatedEvent)

@@ -25,5 +25,6 @@ func DefaultRegistry() map[string]MacroFunc {
 		MacroRebuildIndex:     execRebuildIndex,
 		MacroComputeStats:     execComputeStats,
 		MacroAlertUsage:       execAlertUsage,
+		MacroPurgeTrash:       execPurgeTrash,
 	}
 }

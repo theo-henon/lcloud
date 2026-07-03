@@ -49,9 +49,11 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *auth.Service, *volume.Service,
 	volumeService := volume.NewService(db, diskRegistry, indexManager)
 	monitoringService := monitoring.NewService(volumeService, diskRegistry, service, settingsService)
 	fileService := volume.NewFileService(volumeService, indexManager, cfg.MaxUploadBytes, monitoringService.StatsCache())
+	trashService := volume.NewTrashService(volumeService, indexManager, monitoringService.StatsCache())
 	pluginService := plugin.NewService(db, t.TempDir(), volumeService, nil)
 	volumeService.SetEventPublisher(pluginService.Publisher())
 	fileService.SetEventPublisher(pluginService.Publisher())
+	trashService.SetEventPublisher(pluginService.Publisher())
 	macroOps := volume.NewMacroOps(volumeService, indexManager, monitoringService.StatsCache(), pluginService.Publisher())
 	taskExecutor := task.NewExecutor(macroOps, monitoringService, volumeService, pluginService)
 	taskService := task.NewService(db, volumeService, service, taskExecutor, pluginService)
@@ -62,6 +64,7 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *auth.Service, *volume.Service,
 		DiskRegistry:      diskRegistry,
 		VolumeService:     volumeService,
 		FileService:       fileService,
+		TrashService:      trashService,
 		MonitoringService: monitoringService,
 		SettingsService:   settingsService,
 		DashboardService:  dashboardService,

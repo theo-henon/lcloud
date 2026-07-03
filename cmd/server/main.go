@@ -11,6 +11,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	"time"
+
 	"github.com/theo-henon/lcloud/internal/api"
 	"github.com/theo-henon/lcloud/internal/auth"
 	"github.com/theo-henon/lcloud/internal/config"
@@ -75,6 +77,7 @@ func main() {
 	volumeService := volume.NewService(db, diskRegistry, indexManager)
 	monitoringService := monitoring.NewService(volumeService, diskRegistry, authService, settingsService)
 	fileService := volume.NewFileService(volumeService, indexManager, cfg.MaxUploadBytes, monitoringService.StatsCache())
+	trashService := volume.NewTrashService(volumeService, indexManager, monitoringService.StatsCache())
 
 	pluginService := plugin.NewService(db, cfg.PluginsPath, volumeService, nil)
 	volumeService.SetEventPublisher(pluginService.Publisher())
@@ -88,6 +91,7 @@ func main() {
 	}
 	taskService.SetScheduler(taskScheduler)
 	fileService.SetEventPublisher(pluginService.Publisher())
+	trashService.SetEventPublisher(pluginService.Publisher())
 
 	dashboardService := dashboard.NewService(db)
 
@@ -132,6 +136,7 @@ func main() {
 		DiskRegistry:      diskRegistry,
 		VolumeService:     volumeService,
 		FileService:       fileService,
+		TrashService:      trashService,
 		MonitoringService: monitoringService,
 		SettingsService:   settingsService,
 		DashboardService:  dashboardService,
@@ -148,6 +153,8 @@ func main() {
 	addr := ":" + cfg.AppPort
 	server := &http.Server{Addr: addr, Handler: router}
 
+	go runTrashSweeper(context.Background(), trashService, cfg.TrashRetentionDays)
+
 	go func() {
 		ch := make(chan os.Signal, 1)
 		signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
@@ -162,4 +169,33 @@ func main() {
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("server: %v", err)
 	}
+}
+
+func runTrashSweeper(ctx context.Context, trash *volume.TrashService, retentionDays int) {
+	if retentionDays <= 0 {
+		return
+	}
+	sweep := func() {
+		count, err := trash.PurgeOlderThanAllVolumes(ctx, retentionDays)
+		if err != nil {
+			log.Printf("trash sweeper: %v", err)
+			return
+		}
+		if count > 0 {
+			log.Printf("trash sweeper: purged %d items across volumes (retention %d days)", count, retentionDays)
+		}
+	}
+	go func() {
+		sweep()
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				sweep()
+			}
+		}
+	}()
 }

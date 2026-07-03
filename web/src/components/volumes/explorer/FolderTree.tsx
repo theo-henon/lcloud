@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Trash2 } from "lucide-react";
 import { useDroppable } from "@dnd-kit/core";
 import { useVolumeFiles } from "@/hooks/useVolumeFiles";
 import { treeExpandedPathsForSelection } from "@/lib/explorerPaths";
@@ -106,9 +106,18 @@ type FolderTreeProps = {
   selectedPath: string;
   onSelect: (path: string) => void;
   width: number;
+  trashSelected?: boolean;
+  onSelectTrash?: () => void;
 };
 
-export function FolderTree({ volumeId, selectedPath, onSelect, width }: FolderTreeProps) {
+export function FolderTree({
+  volumeId,
+  selectedPath,
+  onSelect,
+  width,
+  trashSelected = false,
+  onSelectTrash,
+}: FolderTreeProps) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ ".": true });
 
   useEffect(() => {
@@ -134,6 +143,21 @@ export function FolderTree({ volumeId, selectedPath, onSelect, width }: FolderTr
             setExpanded((prev) => ({ ...prev, [path]: !(prev[path] ?? false) }))
           }
         />
+        {onSelectTrash ? (
+          <div className="mt-4 border-t border-hairline pt-2">
+            <button
+              type="button"
+              className={cn(
+                "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-surface-elevated",
+                trashSelected && "bg-surface-elevated text-primary",
+              )}
+              onClick={onSelectTrash}
+            >
+              <Trash2 className="h-4 w-4 shrink-0 text-muted" aria-hidden />
+              <span className="text-muted">Trash</span>
+            </button>
+          </div>
+        ) : null}
       </div>
     </aside>
   );

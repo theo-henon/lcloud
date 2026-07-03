@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -223,12 +224,18 @@ func (h *FileHandler) Thumbnail(c *gin.Context) {
 	}
 
 	relPath := c.Query("path")
-	if relPath == "" {
-		httputil.BadRequest(c, "path is required")
+	fileID := c.Query("id")
+	if relPath == "" && fileID == "" {
+		httputil.BadRequest(c, "path or id is required")
 		return
 	}
 
-	file, err := h.files.OpenThumbnail(claims, volumeID, relPath)
+	var file *os.File
+	if fileID != "" {
+		file, err = h.files.OpenThumbnailByID(claims, volumeID, fileID)
+	} else {
+		file, err = h.files.OpenThumbnail(claims, volumeID, relPath)
+	}
 	if err != nil {
 		mapFileError(c, err)
 		return

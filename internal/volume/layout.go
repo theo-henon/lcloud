@@ -13,6 +13,7 @@ func createVolumeLayout(rootPath string) error {
 		filepath.Join(rootPath, CacheDir, MetadataDir),
 		filepath.Join(rootPath, PluginsDir),
 		filepath.Join(rootPath, LogsDir),
+		filepath.Join(rootPath, TrashDir),
 	}
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0o755); err != nil {

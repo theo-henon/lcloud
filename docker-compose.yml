@@ -39,6 +39,7 @@ services:
       FTP_PASV_MIN: ${FTP_PASV_MIN:-30000}
       FTP_PASV_MAX: ${FTP_PASV_MAX:-30010}
       FTP_PASV_ADDRESS: ${FTP_PASV_ADDRESS:-127.0.0.1}
+      LCLOUD_TRASH_RETENTION_DAYS: ${LCLOUD_TRASH_RETENTION_DAYS:-30}
     volumes:
       - ${STORAGE_BASE_PATH:-./data/storage}:/data/storage
       - ${DISK_SSD:-./data/disks/ssd}:/data/disks/ssd

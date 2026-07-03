@@ -57,6 +57,7 @@ export function TaskForm({
       setScope("volume");
     }
     if (nextMacro === "delete_old_files") setParameters({ days: 90 });
+    else if (nextMacro === "purge_trash") setParameters({ days: 30 });
     else if (nextMacro === "delete_large_files") setParameters({ min_size_mb: 100 });
     else if (nextMacro === "move_files") setParameters({ pattern: "*.jpg", target_subfolder: "archive" });
     else if (nextMacro === "alert_usage") setParameters({ threshold_percent: 80 });

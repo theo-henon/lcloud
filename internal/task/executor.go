@@ -166,7 +166,7 @@ func execDeleteOldFiles(ctx context.Context, exec *Executor, vc *VolumeContext, 
 			}
 			continue
 		}
-		if err := exec.macroOps.DeleteFileInternal(ctx, vol, record.RelativePath); err != nil {
+		if err := exec.macroOps.TrashFileInternal(ctx, vol, record.RelativePath); err != nil {
 			if err == volume.ErrFileNotFound {
 				continue
 			}
@@ -175,9 +175,9 @@ func execDeleteOldFiles(ctx context.Context, exec *Executor, vc *VolumeContext, 
 		affected++
 	}
 
-	msg := fmt.Sprintf("Deleted %d files older than %d days", affected, days)
+	msg := fmt.Sprintf("Trashed %d files older than %d days", affected, days)
 	if dryRun {
-		msg = fmt.Sprintf("Would delete %d files older than %d days", affected, days)
+		msg = fmt.Sprintf("Would trash %d files older than %d days", affected, days)
 	}
 	return MacroResult{AffectedCount: affected, Message: msg, PreviewPaths: preview}, nil
 }
@@ -224,7 +224,7 @@ func execDeleteLargeFiles(ctx context.Context, exec *Executor, vc *VolumeContext
 			}
 			continue
 		}
-		if err := exec.macroOps.DeleteFileInternal(ctx, vol, record.RelativePath); err != nil {
+		if err := exec.macroOps.TrashFileInternal(ctx, vol, record.RelativePath); err != nil {
 			if err == volume.ErrFileNotFound {
 				continue
 			}
@@ -233,9 +233,30 @@ func execDeleteLargeFiles(ctx context.Context, exec *Executor, vc *VolumeContext
 		affected++
 	}
 
-	msg := fmt.Sprintf("Deleted %d files larger than %d MB", affected, ParamInt(params, "min_size_mb"))
+	msg := fmt.Sprintf("Trashed %d files larger than %d MB", affected, ParamInt(params, "min_size_mb"))
 	if dryRun {
-		msg = fmt.Sprintf("Would delete %d files larger than %d MB", affected, ParamInt(params, "min_size_mb"))
+		msg = fmt.Sprintf("Would trash %d files larger than %d MB", affected, ParamInt(params, "min_size_mb"))
+	}
+	return MacroResult{AffectedCount: affected, Message: msg, PreviewPaths: preview}, nil
+}
+
+func execPurgeTrash(ctx context.Context, exec *Executor, vc *VolumeContext, params Parameters) (MacroResult, error) {
+	days := ParamInt(params, "days")
+	dryRun := IsDryRun(params)
+
+	vol, err := exec.volumeByContext(vc)
+	if err != nil {
+		return MacroResult{}, err
+	}
+
+	affected, preview, err := exec.macroOps.PurgeTrashOlderThan(ctx, vol, days, dryRun)
+	if err != nil {
+		return MacroResult{}, err
+	}
+
+	msg := fmt.Sprintf("Purged %d items from trash older than %d days", affected, days)
+	if dryRun {
+		msg = fmt.Sprintf("Would purge %d items from trash older than %d days", affected, days)
 	}
 	return MacroResult{AffectedCount: affected, Message: msg, PreviewPaths: preview}, nil
 }

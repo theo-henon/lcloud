@@ -15,6 +15,7 @@ const (
 	MacroRebuildIndex     = "rebuild_index"
 	MacroComputeStats     = "compute_stats"
 	MacroAlertUsage       = "alert_usage"
+	MacroPurgeTrash       = "purge_trash"
 )
 
 var allMacros = map[string]struct{}{
@@ -27,6 +28,7 @@ var allMacros = map[string]struct{}{
 	MacroRebuildIndex:     {},
 	MacroComputeStats:     {},
 	MacroAlertUsage:       {},
+	MacroPurgeTrash:       {},
 }
 
 var destructiveMacros = map[string]struct{}{
@@ -36,6 +38,7 @@ var destructiveMacros = map[string]struct{}{
 	MacroMoveFiles:        {},
 	MacroSortByType:       {},
 	MacroSortByDate:       {},
+	MacroPurgeTrash:       {},
 }
 
 var globalAllowedMacros = map[string]struct{}{
@@ -97,6 +100,8 @@ func ValidateParameters(macro string, params Parameters) error {
 		return nil
 	case MacroAlertUsage:
 		return validateAlertUsageParams(params)
+	case MacroPurgeTrash:
+		return validateDeleteOldFilesParams(params)
 	default:
 		return ErrInvalidMacro
 	}

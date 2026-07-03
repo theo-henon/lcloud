@@ -38,6 +38,7 @@ export function useDeleteFile(volumeId: string) {
     mutationFn: (filePath: string) => api.deleteFile(volumeId, filePath),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["volumes", volumeId, "files"] });
+      void queryClient.invalidateQueries({ queryKey: ["volumes", volumeId, "trash"] });
       void queryClient.invalidateQueries({ queryKey: ["volumes", volumeId] });
       void queryClient.invalidateQueries({ queryKey: ["volumes"] });
     },
