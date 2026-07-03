@@ -46,6 +46,8 @@ export function SettingsPage() {
   const maskDiskNames = settingsQuery.data?.mask_disk_names ?? false;
   const webdavEnabled = settingsQuery.data?.protocols_webdav_enabled ?? false;
   const ftpEnabled = settingsQuery.data?.protocols_ftp_enabled ?? false;
+  const notifyAdminsOnDeletion =
+    settingsQuery.data?.notify_admins_on_deletion_request ?? true;
 
   return (
     <>
@@ -133,6 +135,43 @@ export function SettingsPage() {
               FTP is{" "}
               <span className="font-medium text-ink">{ftpEnabled ? "enabled" : "disabled"}</span>{" "}
               instance-wide. Only an administrator can change these options.
+            </p>
+          )}
+        </Card>
+
+        <Card className="space-y-4 p-6">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
+              Notifications
+            </h2>
+            <p className="mt-2 text-sm text-body">
+              Control whether administrators receive in-app alerts when a user requests volume
+              deletion. The deletion queue on Volumes is unaffected.
+            </p>
+          </div>
+
+          {settingsQuery.isLoading ? (
+            <p className="text-sm text-muted">Loading settings...</p>
+          ) : settingsQuery.isError ? (
+            <p className="text-sm text-accent-rose">Unable to load settings.</p>
+          ) : isAdmin ? (
+            <SettingsToggle
+              label="Notify all admins when a user requests volume deletion"
+              enabled={notifyAdminsOnDeletion}
+              disabled={updateSettings.isPending}
+              onChange={(value) => {
+                void updateSettings.mutateAsync({
+                  notify_admins_on_deletion_request: value,
+                });
+              }}
+            />
+          ) : (
+            <p className="text-sm text-body">
+              Deletion-request alerts are{" "}
+              <span className="font-medium text-ink">
+                {notifyAdminsOnDeletion ? "enabled" : "disabled"}
+              </span>{" "}
+              for administrators. Only an administrator can change this option.
             </p>
           )}
         </Card>

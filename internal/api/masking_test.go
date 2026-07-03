@@ -14,7 +14,7 @@ import (
 )
 
 func TestVolumeCreateAllowedForRegularUserWithDiskID(t *testing.T) {
-	router, service, _, diskPath := setupTestRouter(t)
+	router, service, _, _, diskPath := setupTestRouter(t)
 
 	_, err := service.CreateUser("user@example.com", "password123", auth.RoleUser)
 	require.NoError(t, err)
@@ -37,7 +37,7 @@ func TestVolumeCreateAllowedForRegularUserWithDiskID(t *testing.T) {
 }
 
 func TestVolumeCreateDiskPathForbiddenForRegularUser(t *testing.T) {
-	router, service, _, diskPath := setupTestRouter(t)
+	router, service, _, _, diskPath := setupTestRouter(t)
 
 	_, err := service.CreateUser("user@example.com", "password123", auth.RoleUser)
 	require.NoError(t, err)
@@ -62,7 +62,7 @@ func TestVolumeCreateDiskPathForbiddenForRegularUser(t *testing.T) {
 }
 
 func TestVolumeDeleteForbiddenForRegularUser(t *testing.T) {
-	router, service, volumeService, diskPath := setupTestRouter(t)
+	router, service, volumeService, _, diskPath := setupTestRouter(t)
 
 	user, err := service.CreateUser("user@example.com", "password123", auth.RoleUser)
 	require.NoError(t, err)
@@ -85,7 +85,7 @@ func TestVolumeDeleteForbiddenForRegularUser(t *testing.T) {
 }
 
 func TestDiskMasking_HidesVolumePathsForRegularUser(t *testing.T) {
-	router, service, volumeService, diskPath := setupTestRouter(t)
+	router, service, volumeService, _, diskPath := setupTestRouter(t)
 
 	adminLogin, err := service.Login("admin@example.com", "adminpass1")
 	require.NoError(t, err)
@@ -173,7 +173,7 @@ func TestDiskMasking_HidesVolumePathsForRegularUser(t *testing.T) {
 }
 
 func TestDiskMasking_MonitoringOverviewForRegularUser(t *testing.T) {
-	router, service, volumeService, diskPath := setupTestRouter(t)
+	router, service, volumeService, _, diskPath := setupTestRouter(t)
 
 	adminLogin, err := service.Login("admin@example.com", "adminpass1")
 	require.NoError(t, err)
@@ -229,7 +229,7 @@ func TestDiskMasking_MonitoringOverviewForRegularUser(t *testing.T) {
 }
 
 func TestVolumeListIncludesOwnerEmailForAdmin(t *testing.T) {
-	router, service, volumeService, diskPath := setupTestRouter(t)
+	router, service, volumeService, _, diskPath := setupTestRouter(t)
 
 	member, err := service.CreateUser("creator@example.com", "password123", auth.RoleUser)
 	require.NoError(t, err)
@@ -261,7 +261,7 @@ func TestVolumeListIncludesOwnerEmailForAdmin(t *testing.T) {
 }
 
 func TestVolumeListOmitsOwnerEmailForRegularUser(t *testing.T) {
-	router, service, volumeService, diskPath := setupTestRouter(t)
+	router, service, volumeService, _, diskPath := setupTestRouter(t)
 
 	member, err := service.CreateUser("creator@example.com", "password123", auth.RoleUser)
 	require.NoError(t, err)
@@ -290,7 +290,7 @@ func TestVolumeListOmitsOwnerEmailForRegularUser(t *testing.T) {
 }
 
 func TestMonitoringOverviewIncludesOwnerEmailForAdmin(t *testing.T) {
-	router, service, volumeService, diskPath := setupTestRouter(t)
+	router, service, volumeService, _, diskPath := setupTestRouter(t)
 
 	member, err := service.CreateUser("creator@example.com", "password123", auth.RoleUser)
 	require.NoError(t, err)
@@ -317,7 +317,7 @@ func TestMonitoringOverviewIncludesOwnerEmailForAdmin(t *testing.T) {
 }
 
 func TestDiskMasking_PatchResponseIsMasked(t *testing.T) {
-	router, service, volumeService, diskPath := setupTestRouter(t)
+	router, service, volumeService, _, diskPath := setupTestRouter(t)
 
 	adminLogin, err := service.Login("admin@example.com", "adminpass1")
 	require.NoError(t, err)
@@ -371,7 +371,7 @@ func TestDiskMasking_PatchResponseIsMasked(t *testing.T) {
 }
 
 func TestVolumeDeletionRequestOwnerCanRequest(t *testing.T) {
-	router, service, volumeService, diskPath := setupTestRouter(t)
+	router, service, volumeService, _, diskPath := setupTestRouter(t)
 
 	user, err := service.CreateUser("owner@example.com", "password123", auth.RoleUser)
 	require.NoError(t, err)
@@ -399,7 +399,7 @@ func TestVolumeDeletionRequestOwnerCanRequest(t *testing.T) {
 }
 
 func TestVolumeDeletionRequestForbiddenForNonOwner(t *testing.T) {
-	router, service, volumeService, diskPath := setupTestRouter(t)
+	router, service, volumeService, _, diskPath := setupTestRouter(t)
 
 	owner, err := service.CreateUser("owner@example.com", "password123", auth.RoleUser)
 	require.NoError(t, err)
@@ -423,7 +423,7 @@ func TestVolumeDeletionRequestForbiddenForNonOwner(t *testing.T) {
 }
 
 func TestVolumeDeletionRequestAdminListAndDismiss(t *testing.T) {
-	router, service, volumeService, diskPath := setupTestRouter(t)
+	router, service, volumeService, _, diskPath := setupTestRouter(t)
 
 	user, err := service.CreateUser("owner@example.com", "password123", auth.RoleUser)
 	require.NoError(t, err)
@@ -490,7 +490,7 @@ func TestVolumeDeletionRequestAdminListAndDismiss(t *testing.T) {
 }
 
 func TestVolumeDeletionRequestNonAdminCannotList(t *testing.T) {
-	router, service, _, _ := setupTestRouter(t)
+	router, service, _, _, _ := setupTestRouter(t)
 
 	_, err := service.CreateUser("user@example.com", "password123", auth.RoleUser)
 	require.NoError(t, err)

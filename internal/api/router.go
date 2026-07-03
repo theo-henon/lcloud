@@ -14,6 +14,7 @@ import (
 	"github.com/theo-henon/lcloud/internal/dashboard"
 	"github.com/theo-henon/lcloud/internal/indexer"
 	"github.com/theo-henon/lcloud/internal/monitoring"
+	"github.com/theo-henon/lcloud/internal/notification"
 	"github.com/theo-henon/lcloud/internal/plugin"
 	"github.com/theo-henon/lcloud/internal/protocols"
 	protocolwebdav "github.com/theo-henon/lcloud/internal/protocols/webdav"
@@ -233,8 +234,9 @@ type RouterConfig struct {
 	SettingsService   *settings.Service
 	DashboardService  *dashboard.Service
 	PluginService     *plugin.Service
-	TaskService       *task.Service
-	IndexManager      *indexer.IndexManager
+	TaskService          *task.Service
+	NotificationService  *notification.Service
+	IndexManager         *indexer.IndexManager
 	MaxUploadBytes    int64
 	FTPPort           int
 	ProtocolGateway   *protocols.Gateway
@@ -268,6 +270,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	taskHandler := NewTaskHandler(cfg.TaskService)
 	protocolHandler := NewProtocolHandler(cfg.VolumeService, cfg.FTPPort)
 	dashboardHandler := NewDashboardHandler(cfg.DashboardService)
+	notificationHandler := NewNotificationHandler(cfg.NotificationService)
 
 	if cfg.ProtocolGateway != nil {
 		protocolwebdav.RegisterRoutes(router, cfg.ProtocolGateway)
@@ -347,6 +350,12 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			protected.GET("/users/me/dashboard", dashboardHandler.GetMe)
 			protected.PATCH("/users/me/dashboard", dashboardHandler.PatchMe)
 			protected.DELETE("/users/me/dashboard", dashboardHandler.DeleteMe)
+
+			protected.GET("/notifications", notificationHandler.List)
+			protected.GET("/notifications/unread-count", notificationHandler.UnreadCount)
+			protected.PATCH("/notifications/:id/read", notificationHandler.MarkRead)
+			protected.POST("/notifications/read-all", notificationHandler.MarkAllRead)
+			protected.DELETE("/notifications/:id", notificationHandler.Dismiss)
 		}
 	}
 

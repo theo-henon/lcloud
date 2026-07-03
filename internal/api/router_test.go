@@ -15,6 +15,7 @@ import (
 	"github.com/theo-henon/lcloud/internal/dashboard"
 	"github.com/theo-henon/lcloud/internal/indexer"
 	"github.com/theo-henon/lcloud/internal/monitoring"
+	"github.com/theo-henon/lcloud/internal/notification"
 	"github.com/theo-henon/lcloud/internal/plugin"
 	"github.com/theo-henon/lcloud/internal/protocols"
 	"github.com/theo-henon/lcloud/internal/settings"
@@ -23,14 +24,14 @@ import (
 	"gorm.io/gorm"
 )
 
-func setupTestRouter(t *testing.T) (*gin.Engine, *auth.Service, *volume.Service, string) {
+func setupTestRouter(t *testing.T) (*gin.Engine, *auth.Service, *volume.Service, *notification.Service, string) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
 	dsn := "file:" + t.Name() + "?mode=memory&cache=private"
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&auth.User{}, &auth.RefreshToken{}, &volume.Volume{}, &volume.VolumeDeletionRequest{}, &settings.InstanceSettings{}, &plugin.Plugin{}, &plugin.PluginLogEntry{}, &task.Task{}, &task.TaskRun{}, &dashboard.UserDashboardLayout{}))
+	require.NoError(t, db.AutoMigrate(&auth.User{}, &auth.RefreshToken{}, &volume.Volume{}, &volume.VolumeDeletionRequest{}, &settings.InstanceSettings{}, &plugin.Plugin{}, &plugin.PluginLogEntry{}, &task.Task{}, &task.TaskRun{}, &dashboard.UserDashboardLayout{}, &notification.Notification{}))
 
 	service := auth.NewService(db, "01234567890123456789012345678901", 24, 7)
 	require.NoError(t, service.SeedAdmin("admin@example.com", "adminpass1"))
@@ -58,6 +59,7 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *auth.Service, *volume.Service,
 	taskExecutor := task.NewExecutor(macroOps, monitoringService, volumeService, pluginService)
 	taskService := task.NewService(db, volumeService, service, taskExecutor, pluginService)
 	dashboardService := dashboard.NewService(db)
+	notificationService := notification.NewService(db, service, volumeService, taskService, settingsService)
 
 	router := NewRouter(RouterConfig{
 		AuthService:       service,
@@ -69,19 +71,20 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *auth.Service, *volume.Service,
 		SettingsService:   settingsService,
 		DashboardService:  dashboardService,
 		PluginService:     pluginService,
-		TaskService:       taskService,
-		IndexManager:      indexManager,
+		TaskService:          taskService,
+		NotificationService:  notificationService,
+		IndexManager:         indexManager,
 		MaxUploadBytes:    cfg.MaxUploadBytes,
 		FTPPort:           2121,
 		ProtocolGateway:   protocols.NewGateway(service, volumeService, fileService, settingsService, 2121),
 		GinMode:           gin.TestMode,
 	})
 
-	return router, service, volumeService, storageRoot
+	return router, service, volumeService, notificationService, storageRoot
 }
 
 func setupTestRouterLegacy(t *testing.T) (*gin.Engine, *auth.Service) {
-	router, service, _, _ := setupTestRouter(t)
+	router, service, _, _, _ := setupTestRouter(t)
 	return router, service
 }
 

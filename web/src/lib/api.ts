@@ -223,7 +223,25 @@ export interface InstanceSettings {
   mask_disk_names: boolean;
   protocols_webdav_enabled: boolean;
   protocols_ftp_enabled: boolean;
+  notify_admins_on_deletion_request: boolean;
   max_upload_bytes: number;
+}
+
+export type NotificationType =
+  | "volume.usage_alert"
+  | "task.failed"
+  | "volume.deletion_requested";
+
+export interface NotificationRecord {
+  id: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  link_path: string;
+  volume_id?: string | null;
+  task_id?: string | null;
+  read_at: string | null;
+  created_at: string;
 }
 
 export interface ProtocolToggle {
@@ -653,6 +671,7 @@ export const api = {
     mask_disk_names?: boolean;
     protocols_webdav_enabled?: boolean;
     protocols_ftp_enabled?: boolean;
+    notify_admins_on_deletion_request?: boolean;
   }) {
     return apiRequest<InstanceSettings>("/api/admin/settings", {
       method: "PATCH",
@@ -743,6 +762,31 @@ export const api = {
   },
   resetDashboardLayout() {
     return apiRequest<void>("/api/users/me/dashboard", { method: "DELETE" });
+  },
+  listNotifications(params: { limit?: number; offset?: number } = {}) {
+    const search = new URLSearchParams();
+    if (params.limit != null) search.set("limit", String(params.limit));
+    if (params.offset != null) search.set("offset", String(params.offset));
+    const query = search.toString();
+    return apiRequest<{ notifications: NotificationRecord[]; total: number }>(
+      `/api/notifications${query ? `?${query}` : ""}`,
+    );
+  },
+  getNotificationUnreadCount() {
+    return apiRequest<{ count: number }>("/api/notifications/unread-count");
+  },
+  markNotificationRead(id: string) {
+    return apiRequest<NotificationRecord>(`/api/notifications/${id}/read`, {
+      method: "PATCH",
+    });
+  },
+  markAllNotificationsRead() {
+    return apiRequest<{ updated: number }>("/api/notifications/read-all", {
+      method: "POST",
+    });
+  },
+  dismissNotification(id: string) {
+    return apiRequest<void>(`/api/notifications/${id}`, { method: "DELETE" });
   },
 };
 

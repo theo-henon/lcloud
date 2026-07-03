@@ -1,5 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { GlobalSearch } from "@/components/layout/GlobalSearch";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ActionIcon } from "@/lib/icons";
@@ -58,6 +59,8 @@ export function Sidebar() {
         </div>
         <div className="mt-1 text-lg font-bold text-ink">Control panel</div>
       </div>
+
+      <NotificationBell />
 
       <GlobalSearch />
 

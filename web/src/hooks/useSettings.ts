@@ -17,6 +17,7 @@ export function useUpdateSettings() {
       mask_disk_names?: boolean;
       protocols_webdav_enabled?: boolean;
       protocols_ftp_enabled?: boolean;
+      notify_admins_on_deletion_request?: boolean;
     }) => api.patchAdminSettings(input),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["settings"] });

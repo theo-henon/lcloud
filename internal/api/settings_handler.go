@@ -42,7 +42,7 @@ func (h *AdminSettingsHandler) Patch(c *gin.Context) {
 		httputil.BadRequest(c, "invalid request body")
 		return
 	}
-	if input.MaskDiskNames == nil && input.ProtocolsWebDAVEnabled == nil && input.ProtocolsFTPEnabled == nil {
+	if input.MaskDiskNames == nil && input.ProtocolsWebDAVEnabled == nil && input.ProtocolsFTPEnabled == nil && input.NotifyAdminsOnDeletionRequest == nil {
 		httputil.BadRequest(c, "at least one setting field required")
 		return
 	}
