@@ -1,5 +1,17 @@
 export type UserRole = "admin" | "user";
 
+export type CreateAdminUserInput = {
+  email: string;
+  password: string;
+  role?: UserRole;
+};
+
+export type PatchAdminUserInput = {
+  role?: UserRole;
+  disabled?: boolean;
+  password?: string;
+};
+
 export type PluginStatus = "running" | "stopped" | "error";
 
 export interface PluginRecord {
@@ -29,6 +41,7 @@ export interface User {
   email: string;
   role: UserRole;
   created_at: string;
+  disabled_at: string | null;
 }
 
 export type FilterMode = "allow" | "block";
@@ -400,6 +413,21 @@ export const api = {
   },
   me() {
     return apiRequest<User>("/api/auth/me");
+  },
+  listAdminUsers() {
+    return apiRequest<{ users: User[] }>("/api/admin/users");
+  },
+  createAdminUser(input: CreateAdminUserInput) {
+    return apiRequest<User>("/api/admin/users", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+  patchAdminUser(id: string, input: PatchAdminUserInput) {
+    return apiRequest<User>(`/api/admin/users/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    });
   },
   listDisks() {
     return apiRequest<{ disks: DiskInfo[] }>("/api/disks");

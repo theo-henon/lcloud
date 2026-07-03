@@ -1,6 +1,6 @@
 # Spec: User management UI (admin)
 
-> **Status:** Draft — pending review  
+> **Status:** Implemented  
 > **Scope:** Replace the `/settings/users` placeholder with a full admin user-management experience — list accounts, create users, change roles, disable access, and reset passwords — backed by new admin API endpoints.  
 > **Prerequisite:** Phase 0 auth shipped (`POST /api/admin/users`, JWT, roles, admin seed). MVP complete.  
 > **Sources:** [VISION.md](../../../VISION.md), [docs/project.md](../../project.md), [IDEAS.md — User management UI (admin)](../../../IDEAS.md), [design/DESIGN.md](../../../design/DESIGN.md)

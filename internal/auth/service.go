@@ -92,6 +92,10 @@ func (s *Service) Login(email, password string) (*LoginResult, error) {
 		return nil, ErrInvalidCredentials
 	}
 
+	if user.DisabledAt != nil {
+		return nil, ErrUserDisabled
+	}
+
 	accessToken, err := s.issueAccessToken(&user)
 	if err != nil {
 		return nil, err
@@ -118,6 +122,10 @@ func (s *Service) Refresh(refreshToken string) (*RefreshResult, error) {
 	var user User
 	if err := s.db.First(&user, "id = ?", record.UserID).Error; err != nil {
 		return nil, ErrInvalidToken
+	}
+
+	if user.DisabledAt != nil {
+		return nil, ErrUserDisabled
 	}
 
 	now := time.Now()
@@ -188,11 +196,113 @@ func (s *Service) GetUserByID(id uuid.UUID) (*User, error) {
 	var user User
 	if err := s.db.First(&user, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrInvalidToken
+			return nil, ErrUserNotFound
 		}
 		return nil, err
 	}
 	return &user, nil
+}
+
+func (s *Service) ListUsers() ([]UserResponse, error) {
+	var users []User
+	if err := s.db.Order("created_at ASC").Find(&users).Error; err != nil {
+		return nil, err
+	}
+
+	responses := make([]UserResponse, len(users))
+	for i := range users {
+		responses[i] = ToUserResponse(&users[i])
+	}
+	return responses, nil
+}
+
+type PatchUserInput struct {
+	Role     *Role
+	Disabled *bool
+	Password *string
+}
+
+func (s *Service) PatchUser(id uuid.UUID, input PatchUserInput) (*User, error) {
+	if input.Role == nil && input.Disabled == nil && input.Password == nil {
+		return nil, ErrEmptyPatch
+	}
+
+	user, err := s.GetUserByID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	if input.Role != nil {
+		if *input.Role != RoleAdmin && *input.Role != RoleUser {
+			return nil, ErrInvalidRole
+		}
+		if user.Role == RoleAdmin && *input.Role == RoleUser {
+			if err := s.ensureAnotherActiveAdmin(user.ID); err != nil {
+				return nil, err
+			}
+		}
+		user.Role = *input.Role
+	}
+
+	if input.Disabled != nil {
+		if *input.Disabled {
+			if user.Role == RoleAdmin && user.DisabledAt == nil {
+				if err := s.ensureAnotherActiveAdmin(user.ID); err != nil {
+					return nil, err
+				}
+			}
+			now := time.Now()
+			user.DisabledAt = &now
+			if err := s.revokeAllRefreshTokens(user.ID); err != nil {
+				return nil, err
+			}
+		} else {
+			user.DisabledAt = nil
+		}
+	}
+
+	if input.Password != nil {
+		if len(*input.Password) < 8 {
+			return nil, ErrInvalidPassword
+		}
+		hash, err := bcrypt.GenerateFromPassword([]byte(*input.Password), bcrypt.DefaultCost)
+		if err != nil {
+			return nil, fmt.Errorf("hash password: %w", err)
+		}
+		user.PasswordHash = string(hash)
+	}
+
+	if err := s.db.Save(user).Error; err != nil {
+		return nil, err
+	}
+
+	return user, nil
+}
+
+func (s *Service) countActiveAdmins(excludeID uuid.UUID) (int64, error) {
+	var count int64
+	err := s.db.Model(&User{}).
+		Where("role = ? AND disabled_at IS NULL AND id != ?", RoleAdmin, excludeID).
+		Count(&count).Error
+	return count, err
+}
+
+func (s *Service) ensureAnotherActiveAdmin(userID uuid.UUID) error {
+	count, err := s.countActiveAdmins(userID)
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return ErrLastAdmin
+	}
+	return nil
+}
+
+func (s *Service) revokeAllRefreshTokens(userID uuid.UUID) error {
+	now := time.Now()
+	return s.db.Model(&RefreshToken{}).
+		Where("user_id = ? AND revoked_at IS NULL", userID).
+		Update("revoked_at", now).Error
 }
 
 func (s *Service) issueAccessToken(user *User) (string, error) {

@@ -61,15 +61,18 @@ export function DropdownMenuItem({
   children,
   onSelect,
   disabled,
+  title,
 }: {
   children: ReactNode;
   onSelect?: () => void;
   disabled?: boolean;
+  title?: string;
 }) {
   return (
     <button
       type="button"
       disabled={disabled}
+      title={title}
       className="flex w-full items-center px-3 py-2 text-left text-sm text-body hover:bg-surface-card hover:text-ink disabled:opacity-50"
       onClick={() => onSelect?.()}
     >

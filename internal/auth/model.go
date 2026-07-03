@@ -15,12 +15,13 @@ const (
 )
 
 type User struct {
-	ID           uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
-	Email        string    `gorm:"uniqueIndex;not null" json:"email"`
-	PasswordHash string    `gorm:"not null" json:"-"`
-	Role         Role      `gorm:"type:varchar(16);not null;default:user" json:"role"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID           uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	Email        string     `gorm:"uniqueIndex;not null" json:"email"`
+	PasswordHash string     `gorm:"not null" json:"-"`
+	Role         Role       `gorm:"type:varchar(16);not null;default:user" json:"role"`
+	DisabledAt   *time.Time `gorm:"index" json:"disabled_at"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
 }
 
 func (User) TableName() string {
@@ -41,18 +42,20 @@ func (RefreshToken) TableName() string {
 }
 
 type UserResponse struct {
-	ID        uuid.UUID `json:"id"`
-	Email     string    `json:"email"`
-	Role      Role      `json:"role"`
-	CreatedAt time.Time `json:"created_at"`
+	ID         uuid.UUID  `json:"id"`
+	Email      string     `json:"email"`
+	Role       Role       `json:"role"`
+	CreatedAt  time.Time  `json:"created_at"`
+	DisabledAt *time.Time `json:"disabled_at"`
 }
 
 func ToUserResponse(user *User) UserResponse {
 	return UserResponse{
-		ID:        user.ID,
-		Email:     user.Email,
-		Role:      user.Role,
-		CreatedAt: user.CreatedAt,
+		ID:         user.ID,
+		Email:      user.Email,
+		Role:       user.Role,
+		CreatedAt:  user.CreatedAt,
+		DisabledAt: user.DisabledAt,
 	}
 }
 
