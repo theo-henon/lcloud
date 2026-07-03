@@ -285,6 +285,19 @@ func TestPatchUserResetPassword(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestEmailsByIDs(t *testing.T) {
+	db := setupTestDB(t)
+	service := newTestService(t, db)
+
+	user, err := service.CreateUser("user@example.com", "password123", RoleUser)
+	require.NoError(t, err)
+
+	emails, err := service.EmailsByIDs([]uuid.UUID{user.ID, user.ID})
+	require.NoError(t, err)
+	require.Len(t, emails, 1)
+	require.Equal(t, "user@example.com", emails[user.ID])
+}
+
 func ptrBool(v bool) *bool {
 	return &v
 }

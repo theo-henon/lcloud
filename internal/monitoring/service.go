@@ -16,19 +16,21 @@ type Service struct {
 	metadata *volume.MetadataCache
 	cache    *StatsCache
 	settings SettingsReader
+	auth     *auth.Service
 }
 
 type SettingsReader interface {
 	ShouldMaskFor(claims *auth.Claims) (bool, error)
 }
 
-func NewService(volumes *volume.Service, disks *volume.DiskRegistry, settings SettingsReader) *Service {
+func NewService(volumes *volume.Service, disks *volume.DiskRegistry, authService *auth.Service, settings SettingsReader) *Service {
 	return &Service{
 		volumes:  volumes,
 		disks:    disks,
 		metadata: volume.NewMetadataCache(),
 		cache:    NewStatsCache(),
 		settings: settings,
+		auth:     authService,
 	}
 }
 
@@ -71,7 +73,7 @@ func (s *Service) GetOverview(ctx context.Context, claims *auth.Claims) (*Overvi
 		for i := range volumes {
 			ownerIDs[i] = volumes[i].OwnerID
 		}
-		ownerEmails, err = s.volumes.OwnerEmailsByIDs(ownerIDs)
+		ownerEmails, err = s.auth.EmailsByIDs(ownerIDs)
 		if err != nil {
 			return nil, err
 		}

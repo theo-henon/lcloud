@@ -64,7 +64,7 @@ func main() {
 	diskRegistry := volume.NewDiskRegistry(cfg)
 	indexManager := indexer.NewIndexManager()
 	volumeService := volume.NewService(db, diskRegistry, indexManager)
-	monitoringService := monitoring.NewService(volumeService, diskRegistry, settingsService)
+	monitoringService := monitoring.NewService(volumeService, diskRegistry, authService, settingsService)
 	fileService := volume.NewFileService(volumeService, indexManager, cfg.MaxUploadBytes, monitoringService.StatsCache())
 
 	pluginService := plugin.NewService(db, cfg.PluginsPath, volumeService, nil)
@@ -72,7 +72,7 @@ func main() {
 
 	macroOps := volume.NewMacroOps(volumeService, indexManager, monitoringService.StatsCache(), pluginService.Publisher())
 	taskExecutor := task.NewExecutor(macroOps, monitoringService, volumeService, pluginService)
-	taskService := task.NewService(db, volumeService, taskExecutor, pluginService)
+	taskService := task.NewService(db, volumeService, authService, taskExecutor, pluginService)
 	taskScheduler, err := task.NewScheduler(taskService)
 	if err != nil {
 		log.Fatalf("task scheduler: %v", err)

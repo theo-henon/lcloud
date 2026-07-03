@@ -469,3 +469,25 @@ func TestTaskListFilterByOwnerForAdmin(t *testing.T) {
 	require.Len(t, resp.Tasks, 1)
 	require.Equal(t, "User task", resp.Tasks[0].Name)
 }
+
+func TestTaskListOwnerFilterForbiddenForNonAdmin(t *testing.T) {
+	router, service, _, _ := setupTestRouter(t)
+
+	_, err := service.CreateUser("user@example.com", "password123", auth.RoleUser)
+	require.NoError(t, err)
+	other, err := service.CreateUser("other@example.com", "password123", auth.RoleUser)
+	require.NoError(t, err)
+
+	login, err := service.Login("user@example.com", "password123")
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/tasks?owner_id="+other.ID.String(),
+		nil,
+	)
+	req.Header.Set("Authorization", "Bearer "+login.AccessToken)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusForbidden, rec.Code)
+}

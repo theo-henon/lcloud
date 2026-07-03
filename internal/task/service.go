@@ -16,6 +16,7 @@ import (
 type Service struct {
 	db        *gorm.DB
 	volumes   *volume.Service
+	auth      *auth.Service
 	executor  *Executor
 	scheduler *Scheduler
 	locks     *RunLocks
@@ -25,12 +26,14 @@ type Service struct {
 func NewService(
 	db *gorm.DB,
 	volumes *volume.Service,
+	authService *auth.Service,
 	executor *Executor,
 	events *plugin.Service,
 ) *Service {
 	s := &Service{
 		db:       db,
 		volumes:  volumes,
+		auth:     authService,
 		executor: executor,
 		locks:    NewRunLocks(),
 		events:   events,
@@ -152,7 +155,7 @@ func (s *Service) List(claims *auth.Claims, volumeID *uuid.UUID, ownerID *uuid.U
 		for i := range views {
 			ownerIDs[i] = views[i].OwnerID
 		}
-		emails, err := s.ownerEmailsByIDs(ownerIDs)
+		emails, err := s.auth.EmailsByIDs(ownerIDs)
 		if err != nil {
 			return nil, err
 		}
@@ -177,7 +180,7 @@ func (s *Service) Get(claims *auth.Claims, id uuid.UUID) (*TaskView, error) {
 		return nil, err
 	}
 	if claims.Role == auth.RoleAdmin {
-		emails, err := s.ownerEmailsByIDs([]uuid.UUID{task.OwnerID})
+		emails, err := s.auth.EmailsByIDs([]uuid.UUID{task.OwnerID})
 		if err != nil {
 			return nil, err
 		}
@@ -533,35 +536,6 @@ func (s *Service) toView(task *Task) (*TaskView, error) {
 		view.LastRunStatus = lastRun.Status
 	}
 	return &view, nil
-}
-
-func (s *Service) ownerEmailsByIDs(ids []uuid.UUID) (map[uuid.UUID]string, error) {
-	if len(ids) == 0 {
-		return map[uuid.UUID]string{}, nil
-	}
-
-	unique := make(map[uuid.UUID]struct{}, len(ids))
-	for _, id := range ids {
-		unique[id] = struct{}{}
-	}
-	deduped := make([]uuid.UUID, 0, len(unique))
-	for id := range unique {
-		deduped = append(deduped, id)
-	}
-
-	var rows []struct {
-		ID    uuid.UUID
-		Email string
-	}
-	if err := s.db.Table("users").Select("id, email").Where("id IN ?", deduped).Scan(&rows).Error; err != nil {
-		return nil, err
-	}
-
-	out := make(map[uuid.UUID]string, len(rows))
-	for _, row := range rows {
-		out[row.ID] = row.Email
-	}
-	return out, nil
 }
 
 func (s *Service) ListEnabled() ([]Task, error) {

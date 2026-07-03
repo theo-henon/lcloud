@@ -36,6 +36,31 @@ func TestVolumeCreateAllowedForRegularUserWithDiskID(t *testing.T) {
 	require.Equal(t, diskPath, vol.DiskPath)
 }
 
+func TestVolumeCreateDiskPathForbiddenForRegularUser(t *testing.T) {
+	router, service, _, diskPath := setupTestRouter(t)
+
+	_, err := service.CreateUser("user@example.com", "password123", auth.RoleUser)
+	require.NoError(t, err)
+
+	login, err := service.Login("user@example.com", "password123")
+	require.NoError(t, err)
+
+	body, err := json.Marshal(map[string]any{
+		"name":        "Photos",
+		"disk_path":   diskPath,
+		"quota_bytes": 0,
+		"filters":     map[string]any{},
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/volumes", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+login.AccessToken)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
 func TestVolumeDeleteForbiddenForRegularUser(t *testing.T) {
 	router, service, volumeService, diskPath := setupTestRouter(t)
 

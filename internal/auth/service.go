@@ -203,6 +203,53 @@ func (s *Service) GetUserByID(id uuid.UUID) (*User, error) {
 	return &user, nil
 }
 
+// ResolveClaims reloads the user from the database so disabled accounts and role
+// changes take effect without waiting for JWT expiry.
+func (s *Service) ResolveClaims(tokenClaims *Claims) (*Claims, error) {
+	user, err := s.GetUserByID(tokenClaims.UserID)
+	if err != nil {
+		return nil, err
+	}
+	if user.DisabledAt != nil {
+		return nil, ErrUserDisabled
+	}
+	return &Claims{
+		UserID: user.ID,
+		Email:  user.Email,
+		Role:   user.Role,
+	}, nil
+}
+
+// EmailsByIDs returns a map of user id → email for the given ids (deduplicated).
+func (s *Service) EmailsByIDs(ids []uuid.UUID) (map[uuid.UUID]string, error) {
+	if len(ids) == 0 {
+		return map[uuid.UUID]string{}, nil
+	}
+
+	unique := make(map[uuid.UUID]struct{}, len(ids))
+	for _, id := range ids {
+		unique[id] = struct{}{}
+	}
+	deduped := make([]uuid.UUID, 0, len(unique))
+	for id := range unique {
+		deduped = append(deduped, id)
+	}
+
+	var rows []struct {
+		ID    uuid.UUID
+		Email string
+	}
+	if err := s.db.Table("users").Select("id, email").Where("id IN ?", deduped).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	out := make(map[uuid.UUID]string, len(rows))
+	for _, row := range rows {
+		out[row.ID] = row.Email
+	}
+	return out, nil
+}
+
 func (s *Service) ListUsers() ([]UserResponse, error) {
 	var users []User
 	if err := s.db.Order("created_at ASC").Find(&users).Error; err != nil {

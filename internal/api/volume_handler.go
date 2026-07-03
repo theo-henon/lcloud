@@ -15,10 +15,11 @@ import (
 type VolumeHandler struct {
 	volumes  *volume.Service
 	settings *settings.Service
+	auth     *auth.Service
 }
 
-func NewVolumeHandler(volumes *volume.Service, settingsService *settings.Service) *VolumeHandler {
-	return &VolumeHandler{volumes: volumes, settings: settingsService}
+func NewVolumeHandler(volumes *volume.Service, settingsService *settings.Service, authService *auth.Service) *VolumeHandler {
+	return &VolumeHandler{volumes: volumes, settings: settingsService, auth: authService}
 }
 
 type createVolumeRequest struct {
@@ -75,7 +76,7 @@ func (h *VolumeHandler) List(c *gin.Context) {
 			ownerIDs[i] = volumes[i].OwnerID
 		}
 		var err error
-		emailByOwner, err = h.volumes.OwnerEmailsByIDs(ownerIDs)
+		emailByOwner, err = h.auth.EmailsByIDs(ownerIDs)
 		if err != nil {
 			httputil.InternalError(c, "unable to list volumes")
 			return
@@ -126,6 +127,10 @@ func (h *VolumeHandler) Create(c *gin.Context) {
 	}
 	if req.DiskPath == "" && req.DiskID == "" {
 		httputil.BadRequest(c, "disk_path or disk_id is required")
+		return
+	}
+	if claims.Role != auth.RoleAdmin && req.DiskPath != "" {
+		httputil.BadRequest(c, "non-admin users must use disk_id")
 		return
 	}
 

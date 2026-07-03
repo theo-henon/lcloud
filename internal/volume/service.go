@@ -351,35 +351,6 @@ func (s *Service) PendingDeletionVolumeIDs(userID uuid.UUID) (map[uuid.UUID]bool
 	return out, nil
 }
 
-func (s *Service) OwnerEmailsByIDs(ids []uuid.UUID) (map[uuid.UUID]string, error) {
-	if len(ids) == 0 {
-		return map[uuid.UUID]string{}, nil
-	}
-
-	unique := make(map[uuid.UUID]struct{}, len(ids))
-	for _, id := range ids {
-		unique[id] = struct{}{}
-	}
-	deduped := make([]uuid.UUID, 0, len(unique))
-	for id := range unique {
-		deduped = append(deduped, id)
-	}
-
-	var rows []struct {
-		ID    uuid.UUID
-		Email string
-	}
-	if err := s.db.Table("users").Select("id, email").Where("id IN ?", deduped).Scan(&rows).Error; err != nil {
-		return nil, err
-	}
-
-	out := make(map[uuid.UUID]string, len(rows))
-	for _, row := range rows {
-		out[row.ID] = row.Email
-	}
-	return out, nil
-}
-
 func (s *Service) dismissDeletionRequestsForVolume(volumeID uuid.UUID) error {
 	now := time.Now()
 	return s.db.Model(&VolumeDeletionRequest{}).

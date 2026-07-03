@@ -250,7 +250,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	authHandler := NewAuthHandler(cfg.AuthService)
 	adminHandler := NewAdminHandler(cfg.AuthService)
 	diskHandler := NewDiskHandler(cfg.DiskRegistry, cfg.SettingsService)
-	volumeHandler := NewVolumeHandler(cfg.VolumeService, cfg.SettingsService)
+	volumeHandler := NewVolumeHandler(cfg.VolumeService, cfg.SettingsService, cfg.AuthService)
 	fileHandler := NewFileHandler(cfg.FileService)
 	monitoringHandler := NewMonitoringHandler(cfg.MonitoringService)
 	searchHandler := NewSearchHandler(cfg.VolumeService, cfg.IndexManager)
