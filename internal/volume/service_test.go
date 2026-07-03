@@ -84,7 +84,8 @@ func TestVolumeDeleteRules(t *testing.T) {
 	_, err = files.Upload(claims, vol.ID, ".", "note.txt", bytes.NewReader([]byte("hello")), 5)
 	require.NoError(t, err)
 
-	require.ErrorIs(t, service.Delete(claims, vol.ID, false), ErrVolumeNotEmpty)
+	require.ErrorIs(t, service.Delete(claims, vol.ID, false), ErrForbidden)
+	require.ErrorIs(t, service.Delete(claims, vol.ID, true), ErrForbidden)
 	require.NoError(t, service.Delete(adminClaims, vol.ID, true))
 }
 

@@ -279,6 +279,8 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			admin.POST("/users", adminHandler.CreateUser)
 			admin.PATCH("/users/:id", adminHandler.PatchUser)
 			admin.PATCH("/settings", adminSettingsHandler.Patch)
+			admin.GET("/volume-deletion-requests", volumeHandler.ListDeletionRequests)
+			admin.DELETE("/volume-deletion-requests/:id", volumeHandler.DismissDeletionRequest)
 		}
 
 		protected := api.Group("", auth.AuthMiddleware(cfg.AuthService))
@@ -288,10 +290,11 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			protected.GET("/search", searchHandler.SearchAll)
 
 			protected.GET("/volumes", volumeHandler.List)
-			protected.POST("/volumes", auth.RequireAdmin(), volumeHandler.Create)
+			protected.POST("/volumes", volumeHandler.Create)
 			protected.GET("/volumes/:id", volumeHandler.Get)
 			protected.PATCH("/volumes/:id", volumeHandler.Patch)
 			protected.DELETE("/volumes/:id", volumeHandler.Delete)
+			protected.POST("/volumes/:id/deletion-request", volumeHandler.RequestDeletion)
 
 			protected.GET("/volumes/:id/files", fileHandler.List)
 			protected.POST("/volumes/:id/files/directories", fileHandler.CreateDirectory)

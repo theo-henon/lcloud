@@ -41,6 +41,7 @@ func main() {
 		&auth.User{},
 		&auth.RefreshToken{},
 		&volume.Volume{},
+		&volume.VolumeDeletionRequest{},
 		&settings.InstanceSettings{},
 		&plugin.Plugin{},
 		&plugin.PluginLogEntry{},

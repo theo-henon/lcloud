@@ -52,6 +52,7 @@ export interface VolumeFilters {
 }
 
 export interface DiskInfo {
+  id: string;
   path: string;
   name: string;
   label: string;
@@ -70,6 +71,7 @@ export interface Volume {
   filters: VolumeFilters;
   created_at: string;
   updated_at: string;
+  deletion_request_pending?: boolean;
 }
 
 export interface FileEntry {
@@ -89,9 +91,19 @@ export interface DirectoryListing {
 
 export interface CreateVolumeInput {
   name: string;
-  disk_path: string;
+  disk_path?: string;
+  disk_id?: string;
   quota_bytes: number;
   filters: VolumeFilters;
+}
+
+export interface VolumeDeletionRequest {
+  id: string;
+  volume_id: string;
+  volume_name: string;
+  user_id: string;
+  user_email: string;
+  created_at: string;
 }
 
 export interface PatchVolumeInput {
@@ -453,6 +465,21 @@ export const api = {
   deleteVolume(id: string, force = false) {
     const query = force ? "?force=true" : "";
     return apiRequest<void>(`/api/volumes/${id}${query}`, { method: "DELETE" });
+  },
+  requestVolumeDeletion(id: string) {
+    return apiRequest<{ status: string }>(`/api/volumes/${id}/deletion-request`, {
+      method: "POST",
+    });
+  },
+  listVolumeDeletionRequests() {
+    return apiRequest<{ requests: VolumeDeletionRequest[] }>(
+      "/api/admin/volume-deletion-requests",
+    );
+  },
+  dismissVolumeDeletionRequest(id: string) {
+    return apiRequest<void>(`/api/admin/volume-deletion-requests/${id}`, {
+      method: "DELETE",
+    });
   },
   listFiles(volumeId: string, path = ".") {
     const params = new URLSearchParams({ path });

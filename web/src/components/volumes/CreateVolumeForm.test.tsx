@@ -9,6 +9,7 @@ describe("CreateVolumeForm", () => {
       <CreateVolumeForm
         disks={[
           {
+            id: "storage-1",
             path: "/data/disks/ssd",
             name: "ssd",
             label: "SSD",
@@ -38,6 +39,7 @@ describe("CreateVolumeForm", () => {
       <CreateVolumeForm
         disks={[
           {
+            id: "storage-1",
             path: "/data/disks/ssd",
             name: "ssd",
             label: "SSD",
@@ -65,6 +67,36 @@ describe("CreateVolumeForm", () => {
         mode: "allow",
         extensions: [".jpg", ".png"],
       },
+    });
+  });
+
+  it("submits disk_id when path is masked", () => {
+    const onSubmit = vi.fn();
+    render(
+      <CreateVolumeForm
+        disks={[
+          {
+            id: "storage-1",
+            path: "",
+            name: "storage-1",
+            label: "Storage 1",
+            total_bytes: 1000,
+            free_bytes: 500,
+          },
+        ]}
+        onCancel={() => undefined}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Photos" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create volume" }));
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      name: "Photos",
+      disk_id: "storage-1",
+      quota_bytes: 0,
+      filters: { mode: "", extensions: [] },
     });
   });
 });

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Header } from "@/components/layout/Header";
 import { CreateVolumeForm } from "@/components/volumes/CreateVolumeForm";
+import { DeletionRequestsPanel } from "@/components/volumes/DeletionRequestsPanel";
 import { VolumeCard } from "@/components/volumes/VolumeCard";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,8 @@ import {
   useCreateVolume,
   useDeleteVolume,
   usePatchVolume,
+  useRequestVolumeDeletion,
+  useVolumeDeletionRequests,
   useVolumes,
 } from "@/hooks/useVolumes";
 import { ActionIcon, navIcons } from "@/lib/icons";
@@ -17,30 +20,36 @@ import { useAuthStore } from "@/store/auth";
 
 export function VolumesPage() {
   const user = useAuthStore((state) => state.user);
+  const isAdmin = user?.role === "admin";
   const [showCreate, setShowCreate] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const disksQuery = useDisks();
   const volumesQuery = useVolumes();
+  const deletionRequestsQuery = useVolumeDeletionRequests(isAdmin);
   const createVolume = useCreateVolume();
   const patchVolume = usePatchVolume();
   const deleteVolume = useDeleteVolume();
+  const requestDeletion = useRequestVolumeDeletion();
 
   const disks = disksQuery.data?.disks ?? [];
   const volumes = volumesQuery.data?.volumes ?? [];
+  const deletionRequests = deletionRequestsQuery.data?.requests ?? [];
 
   return (
     <>
       <Header
         title="Volumes"
-        description="Create and manage storage volumes on your physical disks."
+        description={
+          isAdmin
+            ? "Create and manage storage volumes on your physical disks."
+            : "Create and manage your personal storage volumes."
+        }
         action={
-          user?.role === "admin" ? (
-            <Button onClick={() => setShowCreate(true)} disabled={disks.length === 0}>
-              <ActionIcon action="create" className="mr-2" />
-              Create volume
-            </Button>
-          ) : undefined
+          <Button onClick={() => setShowCreate(true)} disabled={disks.length === 0}>
+            <ActionIcon action="create" className="mr-2" />
+            Create volume
+          </Button>
         }
       />
 
@@ -48,6 +57,8 @@ export function VolumesPage() {
         {error ? (
           <Card className="border-accent-rose/40 p-4 text-sm text-accent-rose">{error}</Card>
         ) : null}
+
+        {isAdmin ? <DeletionRequestsPanel requests={deletionRequests} /> : null}
 
         {showCreate ? (
           <Card className="p-6">
@@ -79,7 +90,11 @@ export function VolumesPage() {
                 <EmptyIcon className="h-8 w-8 text-muted" aria-hidden />
               ) : null;
             })()}
-            <p>No volumes yet. Create one to start storing files.</p>
+            <p>
+              {isAdmin
+                ? "No volumes yet. Create one to start storing files."
+                : "No volumes yet. Create your first volume to start storing files."}
+            </p>
           </Card>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -87,7 +102,7 @@ export function VolumesPage() {
               <VolumeCard
                 key={volume.id}
                 volume={volume}
-                isAdmin={user?.role === "admin"}
+                isAdmin={isAdmin}
                 onRename={(item) => {
                   const nextName = window.prompt("Rename volume", item.name);
                   if (!nextName || nextName.trim() === item.name) {
@@ -114,6 +129,19 @@ export function VolumesPage() {
                     .catch((err) => {
                       setError(err instanceof ApiError ? err.message : "Unable to delete volume.");
                     });
+                }}
+                onRequestDeletion={(item) => {
+                  const message =
+                    "Request deletion of this volume? An administrator must approve and delete it.";
+                  if (!window.confirm(message)) {
+                    return;
+                  }
+                  setError(null);
+                  void requestDeletion.mutateAsync(item.id).catch((err) => {
+                    setError(
+                      err instanceof ApiError ? err.message : "Unable to request deletion.",
+                    );
+                  });
                 }}
               />
             ))}

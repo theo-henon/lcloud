@@ -45,6 +45,37 @@ export function useDeleteVolume() {
       api.deleteVolume(id, force),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["volumes"] });
+      void queryClient.invalidateQueries({ queryKey: ["volume-deletion-requests"] });
+    },
+  });
+}
+
+export function useRequestVolumeDeletion() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.requestVolumeDeletion(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["volumes"] });
+      void queryClient.invalidateQueries({ queryKey: ["volume-deletion-requests"] });
+    },
+  });
+}
+
+export function useVolumeDeletionRequests(enabled = true) {
+  return useQuery({
+    queryKey: ["volume-deletion-requests"],
+    queryFn: () => api.listVolumeDeletionRequests(),
+    enabled,
+    staleTime: 15_000,
+  });
+}
+
+export function useDismissVolumeDeletionRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.dismissVolumeDeletionRequest(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["volume-deletion-requests"] });
     },
   });
 }

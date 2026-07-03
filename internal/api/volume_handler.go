@@ -23,7 +23,8 @@ func NewVolumeHandler(volumes *volume.Service, settingsService *settings.Service
 
 type createVolumeRequest struct {
 	Name       string         `json:"name" binding:"required"`
-	DiskPath   string         `json:"disk_path" binding:"required"`
+	DiskPath   string         `json:"disk_path"`
+	DiskID     string         `json:"disk_id"`
 	QuotaBytes int64          `json:"quota_bytes"`
 	Filters    volume.Filters `json:"filters"`
 }
@@ -46,15 +47,35 @@ func (h *VolumeHandler) List(c *gin.Context) {
 		httputil.InternalError(c, "unable to list volumes")
 		return
 	}
+
+	pendingIDs, err := h.volumes.PendingDeletionVolumeIDs(claims.UserID)
+	if err != nil {
+		httputil.InternalError(c, "unable to list volumes")
+		return
+	}
+
+	items := make([]gin.H, len(volumes))
 	for i := range volumes {
 		masked, err := h.maskVolumeIfNeeded(claims, volumes[i])
 		if err != nil {
 			httputil.InternalError(c, "unable to load settings")
 			return
 		}
-		volumes[i] = masked
+		items[i] = gin.H{
+			"id":                        masked.ID,
+			"name":                      masked.Name,
+			"owner_id":                  masked.OwnerID,
+			"disk_path":                 masked.DiskPath,
+			"root_path":                 masked.RootPath,
+			"quota_bytes":               masked.QuotaBytes,
+			"used_bytes":                masked.UsedBytes,
+			"filters":                   masked.Filters,
+			"created_at":                masked.CreatedAt,
+			"updated_at":                masked.UpdatedAt,
+			"deletion_request_pending":  pendingIDs[masked.ID],
+		}
 	}
-	httputil.JSON(c, http.StatusOK, gin.H{"volumes": volumes})
+	httputil.JSON(c, http.StatusOK, gin.H{"volumes": items})
 }
 
 func (h *VolumeHandler) Create(c *gin.Context) {
@@ -69,10 +90,15 @@ func (h *VolumeHandler) Create(c *gin.Context) {
 		httputil.BadRequest(c, "invalid request body")
 		return
 	}
+	if req.DiskPath == "" && req.DiskID == "" {
+		httputil.BadRequest(c, "disk_path or disk_id is required")
+		return
+	}
 
 	vol, err := h.volumes.Create(claims, volume.CreateVolumeInput{
 		Name:       req.Name,
 		DiskPath:   req.DiskPath,
+		DiskID:     req.DiskID,
 		QuotaBytes: req.QuotaBytes,
 		Filters:    req.Filters,
 	})
@@ -171,6 +197,52 @@ func (h *VolumeHandler) Delete(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+func (h *VolumeHandler) RequestDeletion(c *gin.Context) {
+	claims, ok := auth.ClaimsFromContext(c)
+	if !ok {
+		httputil.Unauthorized(c, "unauthorized")
+		return
+	}
+
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httputil.BadRequest(c, "invalid volume id")
+		return
+	}
+
+	if err := h.volumes.RequestDeletion(claims, id); err != nil {
+		mapVolumeError(c, err)
+		return
+	}
+	httputil.JSON(c, http.StatusCreated, gin.H{"status": "pending"})
+}
+
+func (h *VolumeHandler) ListDeletionRequests(c *gin.Context) {
+	requests, err := h.volumes.ListPendingDeletionRequests()
+	if err != nil {
+		httputil.InternalError(c, "unable to list deletion requests")
+		return
+	}
+	if requests == nil {
+		requests = []volume.DeletionRequestResponse{}
+	}
+	httputil.JSON(c, http.StatusOK, gin.H{"requests": requests})
+}
+
+func (h *VolumeHandler) DismissDeletionRequest(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httputil.BadRequest(c, "invalid request id")
+		return
+	}
+
+	if err := h.volumes.DismissDeletionRequest(id); err != nil {
+		mapVolumeError(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
 func mapVolumeError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, volume.ErrVolumeNotFound):
@@ -185,6 +257,10 @@ func mapVolumeError(c *gin.Context, err error) {
 		httputil.Unprocessable(c, "INVALID_FILTER", "invalid filter configuration")
 	case errors.Is(err, volume.ErrVolumeNotEmpty):
 		httputil.Unprocessable(c, "VOLUME_NOT_EMPTY", "volume is not empty")
+	case errors.Is(err, volume.ErrDeletionRequestExists):
+		httputil.Conflict(c, "deletion request already pending")
+	case errors.Is(err, volume.ErrDeletionRequestNotFound):
+		httputil.Error(c, http.StatusNotFound, "NOT_FOUND", "deletion request not found")
 	default:
 		httputil.InternalError(c, "volume operation failed")
 	}

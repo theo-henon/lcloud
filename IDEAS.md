@@ -238,6 +238,8 @@ Strategic shifts (new audience, new deployment model) → **VISION.md**, not IDE
 
 **Relationship:** complements **User management UI** (accounts exist) and precedes **In-instance volume sharing** (own volumes first, share later).
 
+**Implementation:** [docs/features/user-owned-volumes/SPEC.md](docs/features/user-owned-volumes/SPEC.md) — shipped on `feature/user-management-ui` (phase A).
+
 ---
 
 ### Volume file explorer UX redesign

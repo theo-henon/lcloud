@@ -19,5 +19,7 @@ var (
 	ErrNotDirectory       = errors.New("not a directory")
 	ErrNotAFile           = errors.New("not a file")
 	ErrInvalidEntryName   = errors.New("invalid entry name")
-	ErrForbidden          = errors.New("forbidden")
+	ErrForbidden                 = errors.New("forbidden")
+	ErrDeletionRequestExists     = errors.New("deletion request already pending")
+	ErrDeletionRequestNotFound   = errors.New("deletion request not found")
 )

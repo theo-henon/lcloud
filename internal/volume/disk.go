@@ -1,6 +1,7 @@
 package volume
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 )
 
 type DiskInfo struct {
+	ID         string `json:"id"`
 	Path       string `json:"path"`
 	Name       string `json:"name"`
 	Label      string `json:"label"`
@@ -87,12 +89,26 @@ func (r *DiskRegistry) diskInfo(path string, index int) (DiskInfo, bool) {
 	}
 
 	return DiskInfo{
+		ID:         DiskIDForIndex(index),
 		Path:       path,
 		Name:       name,
 		Label:      label,
 		TotalBytes: total,
 		FreeBytes:  free,
 	}, true
+}
+
+func DiskIDForIndex(index int) string {
+	return fmt.Sprintf("storage-%d", index+1)
+}
+
+func (r *DiskRegistry) ResolvePathByID(id string) (string, bool) {
+	for i, path := range r.ResolvedPaths() {
+		if DiskIDForIndex(i) == id {
+			return path, true
+		}
+	}
+	return "", false
 }
 
 func (r *DiskRegistry) IsRegistered(path string) bool {

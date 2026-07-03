@@ -8,9 +8,14 @@ import (
 
 func maskDiskInfo(disk volume.DiskInfo, index int) volume.DiskInfo {
 	label := fmt.Sprintf("Storage %d", index+1)
+	id := volume.DiskIDForIndex(index)
+	if disk.ID != "" {
+		id = disk.ID
+	}
 	return volume.DiskInfo{
+		ID:         id,
 		Path:       "",
-		Name:       fmt.Sprintf("storage-%d", index+1),
+		Name:       id,
 		Label:      label,
 		TotalBytes: disk.TotalBytes,
 		FreeBytes:  disk.FreeBytes,

@@ -13,8 +13,8 @@ import (
 	"github.com/theo-henon/lcloud/internal/volume"
 )
 
-func TestVolumeCreateForbiddenForRegularUser(t *testing.T) {
-	router, service, _, _ := setupTestRouter(t)
+func TestVolumeCreateAllowedForRegularUserWithDiskID(t *testing.T) {
+	router, service, _, diskPath := setupTestRouter(t)
 
 	_, err := service.CreateUser("user@example.com", "password123", auth.RoleUser)
 	require.NoError(t, err)
@@ -22,13 +22,41 @@ func TestVolumeCreateForbiddenForRegularUser(t *testing.T) {
 	login, err := service.Login("user@example.com", "password123")
 	require.NoError(t, err)
 
-	body := []byte(`{"name":"Photos","disk_path":"/tmp","quota_bytes":0,"filters":{}}`)
+	body := []byte(`{"name":"Photos","disk_id":"storage-1","quota_bytes":0,"filters":{}}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/volumes", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+login.AccessToken)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
-	require.Equal(t, http.StatusForbidden, rec.Code)
+	require.Equal(t, http.StatusCreated, rec.Code)
+
+	var vol volume.Volume
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &vol))
+	require.Equal(t, "Photos", vol.Name)
+	require.Equal(t, diskPath, vol.DiskPath)
+}
+
+func TestVolumeDeleteForbiddenForRegularUser(t *testing.T) {
+	router, service, volumeService, diskPath := setupTestRouter(t)
+
+	user, err := service.CreateUser("user@example.com", "password123", auth.RoleUser)
+	require.NoError(t, err)
+
+	claims := &auth.Claims{UserID: user.ID, Role: auth.RoleUser}
+	vol, err := volumeService.Create(claims, volume.CreateVolumeInput{
+		Name:     "Photos",
+		DiskPath: diskPath,
+	})
+	require.NoError(t, err)
+
+	login, err := service.Login("user@example.com", "password123")
+	require.NoError(t, err)
+
+	delReq := httptest.NewRequest(http.MethodDelete, "/api/volumes/"+vol.ID.String(), nil)
+	delReq.Header.Set("Authorization", "Bearer "+login.AccessToken)
+	delRec := httptest.NewRecorder()
+	router.ServeHTTP(delRec, delReq)
+	require.Equal(t, http.StatusForbidden, delRec.Code)
 }
 
 func TestDiskMasking_HidesVolumePathsForRegularUser(t *testing.T) {
