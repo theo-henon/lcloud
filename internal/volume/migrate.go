@@ -11,8 +11,12 @@ const defaultProtocolsJSON = `{"webdav":{"enabled":false},"ftp":{"enabled":false
 // PrepareProtocolsColumn adds the protocols JSON column safely on PostgreSQL when
 // volumes already exist. GORM AutoMigrate with NOT NULL fails on backfill; this
 // runs first with nullable add + UPDATE + NOT NULL + DEFAULT.
+// On a fresh install the volumes table does not exist yet — AutoMigrate creates it.
 func PrepareProtocolsColumn(db *gorm.DB) error {
 	if db.Dialector.Name() != "postgres" {
+		return nil
+	}
+	if !db.Migrator().HasTable(&Volume{}) {
 		return nil
 	}
 	if db.Migrator().HasColumn(&Volume{}, "Protocols") {

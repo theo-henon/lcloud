@@ -78,6 +78,7 @@ func (r *DiskRegistry) diskInfo(path string, index int) (DiskInfo, bool) {
 	}
 
 	if err := checkWritable(path); err != nil {
+		log.Printf("disk registry: skipping non-writable disk path %q: %v", path, err)
 		return DiskInfo{}, false
 	}
 
