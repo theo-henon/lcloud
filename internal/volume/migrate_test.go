@@ -33,3 +33,20 @@ func TestPrepareProtocolsColumnExistingRows(t *testing.T) {
 
 	_ = db.Exec(`DELETE FROM volumes WHERE name = 'migrate-test'`)
 }
+
+func TestPrepareProtocolsColumnSkipsWhenVolumesTableMissing(t *testing.T) {
+	dsn := "host=localhost user=lcloud password=changeme dbname=lcloud port=5432 sslmode=disable"
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	if err != nil {
+		t.Skip("postgres not available:", err)
+	}
+
+	require.NoError(t, db.Exec(`DROP TABLE IF EXISTS volumes CASCADE`).Error)
+	t.Cleanup(func() {
+		_ = db.AutoMigrate(&Volume{})
+	})
+
+	require.NoError(t, PrepareProtocolsColumn(db))
+	require.NoError(t, db.AutoMigrate(&Volume{}))
+	require.True(t, db.Migrator().HasColumn(&Volume{}, "Protocols"))
+}

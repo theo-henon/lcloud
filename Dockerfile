@@ -21,13 +21,14 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /lcloud ./cmd/server
 
 FROM alpine:3.21
 
-RUN apk add --no-cache ca-certificates tzdata \
+RUN apk add --no-cache ca-certificates tzdata su-exec \
   && adduser -D -g '' appuser
 
 WORKDIR /app
 COPY --from=go-builder /lcloud /app/lcloud
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
 
-USER appuser
 EXPOSE 8080
 
-ENTRYPOINT ["/app/lcloud"]
+ENTRYPOINT ["/docker-entrypoint.sh"]

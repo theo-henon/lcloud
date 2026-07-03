@@ -69,6 +69,10 @@ make embed          # build frontend and embed into Go binary
 docker compose up -d --build
 ```
 
+**Fresh install (Docker):** create disk directories on the host *before* the first `docker compose up`, or ensure they are writable by your user. If Docker creates them as root, the app cannot register them as storage disks until permissions are fixed. The container entrypoint adjusts ownership under `/data/storage` and `/data/disks` on startup.
+
+`STORAGE_DISK_PATHS` in `.env` must use **container paths** (`/data/disks/ssd`, …), not host paths (`./data/disks/ssd`). Host paths belong in `DISK_SSD`, `DISK_HDD1`, `DISK_HDD2` only.
+
 Or without Make:
 ```bash
 cd web && npm install && npm run build
