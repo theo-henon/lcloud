@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/theo-henon/lcloud/internal/auth"
+	"github.com/theo-henon/lcloud/internal/dashboard"
 	"github.com/theo-henon/lcloud/internal/indexer"
 	"github.com/theo-henon/lcloud/internal/monitoring"
 	"github.com/theo-henon/lcloud/internal/plugin"
@@ -229,6 +230,7 @@ type RouterConfig struct {
 	FileService       *volume.FileService
 	MonitoringService *monitoring.Service
 	SettingsService   *settings.Service
+	DashboardService  *dashboard.Service
 	PluginService     *plugin.Service
 	TaskService       *task.Service
 	IndexManager      *indexer.IndexManager
@@ -263,6 +265,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	pluginHandler := NewPluginHandler(cfg.PluginService)
 	taskHandler := NewTaskHandler(cfg.TaskService)
 	protocolHandler := NewProtocolHandler(cfg.VolumeService, cfg.FTPPort)
+	dashboardHandler := NewDashboardHandler(cfg.DashboardService)
 
 	if cfg.ProtocolGateway != nil {
 		protocolwebdav.RegisterRoutes(router, cfg.ProtocolGateway)
@@ -333,6 +336,10 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			protected.DELETE("/tasks/:id", taskHandler.Delete)
 			protected.POST("/tasks/:id/run", taskHandler.Run)
 			protected.GET("/tasks/:id/runs", taskHandler.Runs)
+
+			protected.GET("/users/me/dashboard", dashboardHandler.GetMe)
+			protected.PATCH("/users/me/dashboard", dashboardHandler.PatchMe)
+			protected.DELETE("/users/me/dashboard", dashboardHandler.DeleteMe)
 		}
 	}
 

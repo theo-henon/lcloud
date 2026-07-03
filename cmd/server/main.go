@@ -14,6 +14,7 @@ import (
 	"github.com/theo-henon/lcloud/internal/api"
 	"github.com/theo-henon/lcloud/internal/auth"
 	"github.com/theo-henon/lcloud/internal/config"
+	"github.com/theo-henon/lcloud/internal/dashboard"
 	"github.com/theo-henon/lcloud/internal/indexer"
 	"github.com/theo-henon/lcloud/internal/monitoring"
 	"github.com/theo-henon/lcloud/internal/plugin"
@@ -54,6 +55,7 @@ func main() {
 		&plugin.PluginLogEntry{},
 		&task.Task{},
 		&task.TaskRun{},
+		&dashboard.UserDashboardLayout{},
 	); err != nil {
 		log.Fatalf("migrate: %v", err)
 	}
@@ -86,6 +88,8 @@ func main() {
 	}
 	taskService.SetScheduler(taskScheduler)
 	fileService.SetEventPublisher(pluginService.Publisher())
+
+	dashboardService := dashboard.NewService(db)
 
 	protocolGateway := protocols.NewGateway(authService, volumeService, fileService, settingsService, cfg.FTPPort)
 	ftpServer := protocolftp.NewServer(
@@ -130,6 +134,7 @@ func main() {
 		FileService:       fileService,
 		MonitoringService: monitoringService,
 		SettingsService:   settingsService,
+		DashboardService:  dashboardService,
 		PluginService:     pluginService,
 		TaskService:       taskService,
 		IndexManager:      indexManager,

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/theo-henon/lcloud/internal/auth"
 	"github.com/theo-henon/lcloud/internal/config"
+	"github.com/theo-henon/lcloud/internal/dashboard"
 	"github.com/theo-henon/lcloud/internal/indexer"
 	"github.com/theo-henon/lcloud/internal/monitoring"
 	"github.com/theo-henon/lcloud/internal/plugin"
@@ -29,7 +30,7 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *auth.Service, *volume.Service,
 	dsn := "file:" + t.Name() + "?mode=memory&cache=private"
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&auth.User{}, &auth.RefreshToken{}, &volume.Volume{}, &volume.VolumeDeletionRequest{}, &settings.InstanceSettings{}, &plugin.Plugin{}, &plugin.PluginLogEntry{}, &task.Task{}, &task.TaskRun{}))
+	require.NoError(t, db.AutoMigrate(&auth.User{}, &auth.RefreshToken{}, &volume.Volume{}, &volume.VolumeDeletionRequest{}, &settings.InstanceSettings{}, &plugin.Plugin{}, &plugin.PluginLogEntry{}, &task.Task{}, &task.TaskRun{}, &dashboard.UserDashboardLayout{}))
 
 	service := auth.NewService(db, "01234567890123456789012345678901", 24, 7)
 	require.NoError(t, service.SeedAdmin("admin@example.com", "adminpass1"))
@@ -54,6 +55,7 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *auth.Service, *volume.Service,
 	macroOps := volume.NewMacroOps(volumeService, indexManager, monitoringService.StatsCache(), pluginService.Publisher())
 	taskExecutor := task.NewExecutor(macroOps, monitoringService, volumeService, pluginService)
 	taskService := task.NewService(db, volumeService, service, taskExecutor, pluginService)
+	dashboardService := dashboard.NewService(db)
 
 	router := NewRouter(RouterConfig{
 		AuthService:       service,
@@ -62,6 +64,7 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *auth.Service, *volume.Service,
 		FileService:       fileService,
 		MonitoringService: monitoringService,
 		SettingsService:   settingsService,
+		DashboardService:  dashboardService,
 		PluginService:     pluginService,
 		TaskService:       taskService,
 		IndexManager:      indexManager,
