@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 type DropdownMenuProps = {
   trigger: ReactNode;
@@ -9,21 +8,67 @@ type DropdownMenuProps = {
   disabled?: boolean;
 };
 
+const MENU_GAP_PX = 8;
+
 export function DropdownMenu({ trigger, children, align = "left", disabled }: DropdownMenuProps) {
   const [open, setOpen] = useState(false);
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({ visibility: "hidden" });
   const rootRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const triggerEl = rootRef.current;
+    const menuEl = menuRef.current;
+    if (!triggerEl || !menuEl) {
+      return;
+    }
+
+    const triggerRect = triggerEl.getBoundingClientRect();
+    const menuRect = menuEl.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - triggerRect.bottom;
+    const openAbove =
+      spaceBelow < menuRect.height + MENU_GAP_PX &&
+      triggerRect.top > menuRect.height + MENU_GAP_PX;
+
+    let top = openAbove
+      ? triggerRect.top - menuRect.height - MENU_GAP_PX
+      : triggerRect.bottom + MENU_GAP_PX;
+    let left = align === "right" ? triggerRect.right - menuRect.width : triggerRect.left;
+
+    const maxLeft = window.innerWidth - menuRect.width - MENU_GAP_PX;
+    left = Math.max(MENU_GAP_PX, Math.min(left, maxLeft));
+    top = Math.max(MENU_GAP_PX, top);
+
+    setMenuStyle({
+      position: "fixed",
+      top,
+      left,
+      zIndex: 50,
+      visibility: "visible",
+    });
+  }, [open, align]);
 
   useEffect(() => {
     if (!open) {
       return;
     }
     const onClick = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) {
         setOpen(false);
       }
     };
+    const onScroll = () => setOpen(false);
     document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      window.removeEventListener("scroll", onScroll, true);
+    };
   }, [open]);
 
   useEffect(() => {
@@ -43,16 +88,18 @@ export function DropdownMenu({ trigger, children, align = "left", disabled }: Dr
       >
         {trigger}
       </div>
-      {open ? (
-        <div
-          className={cn(
-            "absolute z-50 mt-2 min-w-[180px] rounded-md border border-hairline bg-surface-elevated py-1 shadow-lg",
-            align === "right" ? "right-0" : "left-0",
-          )}
-        >
-          <div onClick={() => setOpen(false)}>{children}</div>
-        </div>
-      ) : null}
+      {open
+        ? createPortal(
+            <div
+              ref={menuRef}
+              style={menuStyle}
+              className="min-w-[180px] rounded-md border border-hairline bg-surface-elevated py-1 shadow-lg"
+            >
+              <div onClick={() => setOpen(false)}>{children}</div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
