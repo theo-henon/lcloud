@@ -76,8 +76,8 @@ export const WIDGET_REGISTRY: Record<WidgetType, WidgetDefinitionEntry> = {
   },
 };
 
-export function getWidgetDefinition(type: WidgetType): WidgetDefinitionEntry {
-  return WIDGET_REGISTRY[type];
+export function getWidgetDefinition(type: string): WidgetDefinitionEntry | undefined {
+  return WIDGET_REGISTRY[type as WidgetType];
 }
 
 export const ALL_WIDGET_TYPES = Object.keys(WIDGET_REGISTRY) as WidgetType[];

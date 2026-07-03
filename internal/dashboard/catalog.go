@@ -81,11 +81,11 @@ func DefaultLayout(role auth.Role) Layout {
 			Version: LayoutVersion,
 			Widgets: []WidgetPlacement{
 				{ID: "default-pending-deletions", Type: "pending-deletions", X: 0, Y: 0, W: 6, H: 2},
-				{ID: "default-quick-actions", Type: "quick-actions", X: 6, Y: 0, W: 4, H: 1},
-				{ID: "default-plugins-status", Type: "plugins-status", X: 8, Y: 0, W: 4, H: 2},
-				{ID: "default-storage-summary", Type: "storage-summary", X: 0, Y: 1, W: 6, H: 2},
+				{ID: "default-plugins-status", Type: "plugins-status", X: 6, Y: 0, W: 4, H: 2},
+				{ID: "default-storage-summary", Type: "storage-summary", X: 0, Y: 2, W: 6, H: 2},
 				{ID: "default-volumes-at-risk", Type: "volumes-at-risk", X: 6, Y: 2, W: 6, H: 2},
-				{ID: "default-tasks-overview", Type: "tasks-overview", X: 0, Y: 3, W: 6, H: 2},
+				{ID: "default-tasks-overview", Type: "tasks-overview", X: 0, Y: 4, W: 6, H: 2},
+				{ID: "default-quick-actions", Type: "quick-actions", X: 6, Y: 4, W: 4, H: 1},
 			},
 		}
 	}

@@ -3,7 +3,7 @@ package dashboard
 import (
 	"database/sql/driver"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -34,11 +34,14 @@ func (l *Layout) Scan(value any) error {
 		*l = Layout{Version: LayoutVersion, Widgets: []WidgetPlacement{}}
 		return nil
 	}
-	bytes, ok := value.([]byte)
-	if !ok {
-		return fmt.Errorf("layout: expected []byte, got %T", value)
+	switch v := value.(type) {
+	case []byte:
+		return json.Unmarshal(v, l)
+	case string:
+		return json.Unmarshal([]byte(v), l)
+	default:
+		return errors.New("unsupported layout scan type")
 	}
-	return json.Unmarshal(bytes, l)
 }
 
 type CatalogEntry struct {

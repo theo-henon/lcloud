@@ -37,7 +37,28 @@ func TestDashboardGetDefault(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.Nil(t, resp.UpdatedAt)
 	require.Equal(t, dashboard.DefaultLayout(auth.RoleAdmin), resp.Layout)
+	require.NoError(t, dashboard.ValidateLayout(resp.Layout, auth.RoleAdmin))
 	require.Len(t, resp.Catalog, 7)
+}
+
+func TestDashboardAdminSaveDefaultLayout(t *testing.T) {
+	router, service := setupTestRouterLegacy(t)
+
+	login, err := service.Login("admin@example.com", "adminpass1")
+	require.NoError(t, err)
+
+	defaultLayout := dashboard.DefaultLayout(auth.RoleAdmin)
+	require.NoError(t, dashboard.ValidateLayout(defaultLayout, auth.RoleAdmin))
+
+	body, err := json.Marshal(map[string]any{"layout": defaultLayout})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/users/me/dashboard", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+login.AccessToken)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
 }
 
 func TestDashboardPatchRoundTrip(t *testing.T) {

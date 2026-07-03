@@ -2,6 +2,7 @@ import type { WidgetPlacement } from "@/lib/dashboard/types";
 import { getWidgetDefinition } from "@/lib/dashboard/registry";
 import { DraggableWidget } from "@/components/dashboard/DraggableWidget";
 import { GridDropCell } from "@/components/dashboard/GridDropCell";
+import { WidgetShell } from "@/components/dashboard/WidgetShell";
 
 type DashboardGridProps = {
   widgets: WidgetPlacement[];
@@ -17,8 +18,15 @@ function renderWidget(
   onRemoveWidget?: (widgetId: string) => void,
 ) {
   const definition = getWidgetDefinition(widget.type);
-  const Component = definition.component;
-  const content = <Component id={widget.id} type={widget.type} />;
+  const content = definition ? (
+    <definition.component id={widget.id} type={widget.type} />
+  ) : (
+    <WidgetShell title="Unknown widget">
+      <p className="text-sm text-accent-rose">
+        Widget type &quot;{widget.type}&quot; is not supported.
+      </p>
+    </WidgetShell>
+  );
 
   if (editing && onRemoveWidget) {
     return (

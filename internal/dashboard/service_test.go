@@ -99,6 +99,15 @@ func TestValidateLayoutValidSimple(t *testing.T) {
 	require.NoError(t, ValidateLayout(layout, auth.RoleUser))
 }
 
+func TestLayoutScanString(t *testing.T) {
+	var layout Layout
+	raw := `{"version":1,"widgets":[{"id":"w1","type":"welcome","x":0,"y":0,"w":4,"h":1}]}`
+	require.NoError(t, layout.Scan(raw))
+	require.Equal(t, LayoutVersion, layout.Version)
+	require.Len(t, layout.Widgets, 1)
+	require.Equal(t, "welcome", layout.Widgets[0].Type)
+}
+
 func TestGetLayoutNoRowReturnsDefault(t *testing.T) {
 	db := setupTestDB(t)
 	service := NewService(db)
@@ -109,6 +118,7 @@ func TestGetLayoutNoRowReturnsDefault(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, result.UpdatedAt)
 	require.Equal(t, DefaultLayout(auth.RoleUser), result.Layout)
+	require.NoError(t, ValidateLayout(result.Layout, auth.RoleUser))
 	require.Len(t, result.Catalog, 6)
 }
 
@@ -120,6 +130,17 @@ func TestGetLayoutAdminCatalog(t *testing.T) {
 	result, err := service.GetLayout(t.Context(), claims)
 	require.NoError(t, err)
 	require.Len(t, result.Catalog, 7)
+	require.NoError(t, ValidateLayout(result.Layout, auth.RoleAdmin))
+}
+
+func TestSaveLayoutDefaultAdmin(t *testing.T) {
+	db := setupTestDB(t)
+	service := NewService(db)
+
+	claims := &auth.Claims{UserID: uuid.New(), Role: auth.RoleAdmin}
+	layout := DefaultLayout(auth.RoleAdmin)
+	_, err := service.SaveLayout(t.Context(), claims, layout)
+	require.NoError(t, err)
 }
 
 func TestSaveLayoutRoundTrip(t *testing.T) {

@@ -121,6 +121,9 @@ export function DashboardPage() {
         return;
       }
       const definition = getWidgetDefinition(type);
+      if (!definition) {
+        return;
+      }
       setDraft({
         ...draft,
         widgets: addWidget(draft.widgets, type, definition.defaultW, definition.defaultH),

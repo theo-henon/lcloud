@@ -1,6 +1,5 @@
 import { Button } from "@/components/ui/button";
 import type { CatalogEntry } from "@/lib/dashboard/types";
-import { getWidgetDefinition } from "@/lib/dashboard/registry";
 
 type WidgetPickerProps = {
   catalog: CatalogEntry[];
@@ -26,9 +25,7 @@ export function WidgetPicker({ catalog, existingTypes, onSelect, onClose }: Widg
             <p className="text-sm text-muted">All available widgets are already on your dashboard.</p>
           ) : (
             <ul className="space-y-2">
-              {available.map((entry) => {
-                const definition = getWidgetDefinition(entry.type);
-                return (
+              {available.map((entry) => (
                   <li key={entry.type}>
                     <button
                       type="button"
@@ -38,12 +35,11 @@ export function WidgetPicker({ catalog, existingTypes, onSelect, onClose }: Widg
                       <p className="font-medium text-ink">{entry.title}</p>
                       <p className="mt-1 text-sm text-muted">{entry.description}</p>
                       <p className="mt-2 text-xs text-muted">
-                        Size: {definition.defaultW}×{definition.defaultH}
+                        Size: {entry.default_w}×{entry.default_h}
                       </p>
                     </button>
                   </li>
-                );
-              })}
+                ))}
             </ul>
           )}
         </div>
